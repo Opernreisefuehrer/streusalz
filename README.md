@@ -93,8 +93,9 @@ kann den Live-Shop nicht freischalten.
 
 Der geschützte Endpunkt `/api/cron/mail` arbeitet die Warteschlange ab und entfernt abgelaufene
 Rate-Limit-Schlüssel nach einem Tag. `CRON_SECRET` benötigt mindestens 32 zufällige Zeichen.
-`vercel.json` enthält einen täglichen Wiederholungsjob, kompatibel mit üblichen Hobby-Limits.
-Für häufigere Wiederholungen einen geeigneten Vercel-Tarif und z. B. `*/5 * * * *` konfigurieren.
+`vercel.json` enthält einen täglichen Wiederholungsjob. Für diesen gewerblichen Shop ist
+ein gewerblich geeigneter Tarif mit passendem AV-Vertrag einzurichten (z. B. Vercel Pro,
+nicht ungeprüft Hobby). Für häufigere Wiederholungen z. B. `*/5 * * * *` konfigurieren.
 Der normale Erstversand erfolgt unmittelbar nach der Kunden-/Adminaktion.
 
 ## Vercel und Live-Freischaltung
@@ -109,10 +110,45 @@ Der normale Erstversand erfolgt unmittelbar nach der Kunden-/Adminaktion.
 4. SMTP und echten Versand testen. Steuerangabe, vollständigen Bankdatenblock,
    aktuelle Anbieter-/Produktdaten und rechtlich geprüfte Texte vervollständigen.
 5. `SITE_URL=https://www.streusalz-grosshandel.de`, sichere Adminvariablen,
-   `TERMS_TEXT`, `PRIVACY_TEXT`, `LEGAL_READY=true`, `SHOP_ENABLED=true`,
+   vollständige Datenschutzkonfiguration, `LEGAL_READY=true`, `SHOP_ENABLED=true`,
    `MAIL_MODE=smtp` setzen und erneut deployen.
 6. `isLiveReady()` verhindert Bestellungen bis die Mindestkonfiguration vollständig ist.
    Das ist **keine** rechtliche Prüfung der Texte oder technische Zustellgarantie.
+
+### Rechtstexte und Datenschutzfreigabe
+
+Ausgearbeitete AGB und Datenschutztexte liegen in `src/lib/legal.ts`; Seiten und
+auftragsbezogene Textkopien nutzen dieselbe Quelle. `TERMS_TEXT` und `PRIVACY_TEXT`
+bleiben als optionale fachlich geprüfte Volltext-Overrides erhalten.
+Das Formular übermittelt einen Hash der angezeigten Fassung. Änderungen vor Bestellabschluss
+erfordern erneute Prüfung; die akzeptierten Texte werden beim Auftrag gespeichert.
+Die Kundenmails enthalten die geltenden AGB. Die Rechnungsfreigabe versendet zusätzlich
+die ausdrückliche Auftragsannahme; ein interner Status ist noch kein Nachweis des E-Mail-Zugangs.
+
+Vor Freischaltung sind die **tatsächlichen** Datenbank- und Mailanbieter samt Verarbeitungsland,
+Hosting-Protokollfrist und konkrete Drittland-Garantien in den `PRIVACY_*`-Variablen
+einzutragen. Das Postfach `datenschutz@streusalz-grosshandel.de` muss erreichbar sein;
+die Angabe im Quellcode legt kein Postfach an. Eine gesonderte Datenschutz-Adresse ist
+keine automatische Bestellung eines Datenschutzbeauftragten.
+
+`SELLER_TAX_ID` bleibt privat für Rechnungen. Nur zugeteilte `SELLER_VAT_ID` und `SELLER_WID`
+werden im Impressum veröffentlicht. Der bestätigte Anbieter ist ein nicht im Handelsregister
+eingetragener Einzelunternehmer. Änderungen dieser Angaben erfordern Anpassung des Impressums.
+
+Der öffentliche Shop verwendet keine Analyse-/Marketing-Cookies; der Adminbereich nutzt
+ein notwendiges Sitzungscookie und der Bestellabschluss funktionalen sessionStorage.
+Deshalb wird derzeit kein Einwilligungsbanner eingesetzt (§ 25 Abs. 2 Nr. 2 TDDDG), nicht
+weil überhaupt kein Endgerätespeicher verwendet würde. Neue Trackingdienste dürfen
+nicht ungeprüft ergänzt werden.
+
+Die Texte sind eine auf den bestätigten Ablauf zugeschnittene Fassung, **keine anwaltliche
+Prüfung oder Garantie**. Vor Livebetrieb sind Rechtstexte, AV-Verträge, Aufbewahrung/Löschung,
+Rechnungsarchiv und gegebenenfalls strukturierte E-Rechnungen fachlich zu prüfen.
+Quellen: [§ 5 DDG](https://www.gesetze-im-internet.de/ddg/__5.html),
+[§ 25 TDDDG](https://www.gesetze-im-internet.de/ttdsg/__25.html),
+[§ 147 AO](https://www.gesetze-im-internet.de/ao_1977/__147.html),
+[§ 14b UStG](https://www.gesetze-im-internet.de/ustg_1980/__14b.html)
+und [Vercel DPA](https://vercel.com/legal/dpa).
 
 Vor dem Echtbetrieb besonders prüfen: Vertragsschluss/Vertretung bei drei Rechnungsempfängern,
 Entladung, Lkw-Zufahrt, Umsatzsteuer, Pflichtangaben im Impressum und auf Rechnungen,
@@ -144,6 +180,12 @@ und Backups sind beim Betreiber einzurichten; dieses Projekt ist kein Buchhaltun
 
 Das Startseitenmotiv wurde für dieses Projekt KI-generiert; die SVG-Gebindeillustrationen
 sind eigener Code. Beides ist als Illustration gekennzeichnet, nicht als Produktfotografie.
+Das Motiv orientiert sich für feine Salzstruktur und BigBag-Ausführung an bereitgestellten
+Referenzfotos; die Originalfotos werden nicht als öffentliche Website-Assets übernommen.
+Die Sackware wird im Verbund statt in senkrechten Sack-Säulen dargestellt. Die SVG zeichnet
+acht wechselnde Lagen mit jeweils fünf Säcken à 25 kg; an der Vorderseite wechseln sich
+zwei lange Sackseiten und drei kurze Sackseiten ab. Die dreieckige Schneeflocke wird in Kopf-/Fußzeile
+und als Website-Icon verwendet.
 Es werden keine fremden Produktfotos oder Bewertungen verwendet. Eine pauschale Garantie
 der rechtlichen Schutzfreiheit KI-generierter Inhalte ist nicht möglich.
 Noto Sans für die PDFs ist unter SIL Open Font License lizenziert; die Lizenz liegt unter

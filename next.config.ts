@@ -7,8 +7,10 @@ const nextConfig: NextConfig = {
     return [
       { source: "/index.html", destination: "/", permanent: true },
       { source: "/index.htm", destination: "/", permanent: true },
-      { source: "/streusalz-grosshandel.jpg", destination: "/images/streusalz-logistik.webp", permanent: true },
-      { source: "/streusalz.jpg", destination: "/images/streusalz-logistik.webp", permanent: true },
+      { source: "/streusalz-grosshandel.jpg", destination: "/images/streusalz-logistik-verbund.webp", permanent: true },
+      { source: "/streusalz.jpg", destination: "/images/streusalz-logistik-verbund.webp", permanent: true },
+      { source: "/images/streusalz-logistik.webp", destination: "/images/streusalz-logistik-verbund.webp", permanent: true },
+      { source: "/images/streusalz-logistik-40-saecke.webp", destination: "/images/streusalz-logistik-verbund.webp", permanent: true },
     ];
   },
   async headers() {

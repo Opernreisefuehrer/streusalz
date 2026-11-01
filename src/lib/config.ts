@@ -12,16 +12,36 @@ export function seller() {
     city: process.env.SELLER_CITY || "Mainz",
     phone: process.env.SELLER_PHONE || "01523-6183155",
     email: process.env.SELLER_EMAIL || "info@streusalz-grosshandel.de",
-    taxId: process.env.SELLER_TAX_ID || "",
+    vatId: process.env.SELLER_VAT_ID || "",
+    economicId: process.env.SELLER_WID || "",
+    taxId: process.env.SELLER_VAT_ID || process.env.SELLER_TAX_ID || "",
     bankName: process.env.SELLER_BANK_NAME || "",
     iban: process.env.SELLER_IBAN || "",
     bic: process.env.SELLER_BIC || "",
   };
 }
+export function privacySettings() {
+  const retention = process.env.PRIVACY_HOSTING_LOG_RETENTION_DAYS || "";
+  return {
+    contactEmail: process.env.PRIVACY_CONTACT_EMAIL || "datenschutz@streusalz-grosshandel.de",
+    databaseProvider: process.env.PRIVACY_DATABASE_PROVIDER || "",
+    databaseCountry: process.env.PRIVACY_DATABASE_COUNTRY || "",
+    mailProvider: process.env.PRIVACY_MAIL_PROVIDER || "",
+    mailCountry: process.env.PRIVACY_MAIL_COUNTRY || "",
+    hostingLogDays: /^\d+$/.test(retention) && Number.isSafeInteger(Number(retention)) && Number(retention) > 0 ? Number(retention) : null,
+    transferDetails: process.env.PRIVACY_TRANSFER_DETAILS || "",
+  };
+}
+export function legalConfigurationComplete() {
+  const privacy = privacySettings();
+  return !!privacy.databaseProvider && !!privacy.databaseCountry && !!privacy.mailProvider
+    && !!privacy.mailCountry && privacy.hostingLogDays !== null && !!privacy.transferDetails
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(privacy.contactEmail);
+}
 export function isLiveReady() {
   return process.env.SHOP_ENABLED === "true" && process.env.LEGAL_READY === "true"
-    && !!process.env.TERMS_TEXT && !!process.env.PRIVACY_TEXT
-    && !!process.env.SELLER_TAX_ID && !!process.env.SELLER_IBAN
+    && legalConfigurationComplete()
+    && !!seller().taxId && !!process.env.SELLER_IBAN
     && !!process.env.DATABASE_URL && !!process.env.ORS_API_KEY
     && !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASSWORD
     && !!process.env.ADMIN_PASSWORD_HASH && (process.env.SESSION_SECRET?.length ?? 0) >= 32

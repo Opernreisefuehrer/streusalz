@@ -28,6 +28,7 @@ export const quoteInputSchema = z.object({
 export const orderInputSchema = z.object({
   quoteToken: z.string().min(10).max(12000),
   requestId: z.uuid(),
+  legalVersion: z.string().regex(/^[a-f0-9]{64}$/, "Die Fassung der Vertragsbedingungen ist ungültig. Bitte laden Sie das Bestellformular neu."),
   product: z.enum(["bigbag", "bags"]),
   participants: z.array(participantSchema).min(1).max(3),
   businessAccepted: z.literal(true, { error: "Bestellungen sind ausschließlich für Gewerbetreibende." }),

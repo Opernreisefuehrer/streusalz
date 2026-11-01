@@ -9,7 +9,7 @@ import type { Quote } from "@/lib/pricing";
 
 const emptyAddress = () => ({ street: "", postcode: "", city: "" });
 const emptyParticipant = (tonnes: number): Participant => ({ company: "", contact: "", email: "", phone: "", vatId: "", tonnes, address: emptyAddress(), billingAddress: emptyAddress() });
-export function Checkout({ initialProduct, community, enabled }: { initialProduct: Product; community: boolean; enabled: boolean }) {
+export function Checkout({ initialProduct, community, enabled, legalVersion }: { initialProduct: Product; community: boolean; enabled: boolean; legalVersion: string }) {
   const [product, setProduct] = useState<Product>(initialProduct);
   const [participants, setParticipants] = useState<Participant[]>(community ? [emptyParticipant(10), emptyParticipant(8), emptyParticipant(5)] : [emptyParticipant(23)]);
   const [separateBilling, setSeparateBilling] = useState<boolean[]>([false, false, false]);
@@ -68,7 +68,7 @@ export function Checkout({ initialProduct, community, enabled }: { initialProduc
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           product, participants: customers,
-          quoteToken: quote.token, requestId: requestId.current,
+          quoteToken: quote.token, requestId: requestId.current, legalVersion,
           businessAccepted: data.get("business") === "on", termsAccepted: data.get("terms") === "on",
         }),
       });

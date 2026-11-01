@@ -9,6 +9,7 @@ import { berlinDate, dueDate } from "./delivery-date";
 import { seller, siteUrl } from "./config";
 import { AppError } from "./errors";
 import { buildPdf } from "./pdf";
+import { legalTexts } from "./legal";
 
 export type OrderStatus = "ordered" | "supplier_confirmed" | "invoiced" | "delivered";
 export const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -20,6 +21,7 @@ export interface OrderSnapshot {
   quote: Quote;
   termsText: string;
   privacyText: string;
+  legalVersion: string;
 }
 export interface OrderRow {
   id: string;
@@ -83,10 +85,12 @@ export async function createOrder(db: Database, input: OrderInput, quote: Quote)
         || existing.snapshot.product !== input.product) throw new AppError("Diese Bestellanfrage wurde bereits mit anderen Daten verarbeitet.", 409);
       return existing;
     }
+    const conditions = legalTexts();
+    if (input.legalVersion !== conditions.version) throw new AppError("Die Vertrags- oder Datenschutzhinweise wurden geändert. Bitte laden Sie das Bestellformular neu und prüfen Sie die aktuelle Fassung.", 409);
     const [{ seq }] = await tx.query<{ seq: string }>("SELECT nextval('order_numbers')::text AS seq");
     const id = randomUUID();
     const number = `B-${quote.createdOn.slice(0, 4)}-${seq.padStart(6, "0")}`;
-    const snapshot: OrderSnapshot = { product: input.product, participants: input.participants, quote, termsText: process.env.TERMS_TEXT || "", privacyText: process.env.PRIVACY_TEXT || "" };
+    const snapshot: OrderSnapshot = { product: input.product, participants: input.participants, quote, termsText: conditions.terms, privacyText: conditions.privacy, legalVersion: conditions.version };
     for (const [index, participant] of input.participants.entries()) {
       await buildPdf({
         id, order_id: id, participant_index: index, kind: "invoice", number, created_at: new Date(),
@@ -100,7 +104,7 @@ export async function createOrder(db: Database, input: OrderInput, quote: Quote)
     for (const [index, participant] of input.participants.entries()) {
       const line = quote.lines[index];
       const body = `Guten Tag ${participant.contact},\n\nvielen Dank für Ihre Bestellung bei Streusalz Großhandel.\nIhre Bestellung ${number} ist eingegangen. Dies ist eine Eingangsbestätigung, noch keine Lieferzusage oder Rechnung.\n\nIhr Anteil:\n${line.tonnes} Tonnen ${PRODUCTS[input.product].name}\nWarenwert netto: ${money(line.goodsCents)}\nLieferkosten netto: ${money(line.freightCents)}\n19 % MwSt.: ${money(line.vatCents)}\nGesamt brutto: ${money(line.grossCents)}\n\nLieferadresse: ${participant.company}, ${participant.address.street}, ${participant.address.postcode} ${participant.address.city}\nVoraussichtlicher Liefertermin: ${displayDate(line.deliveryDate)} (unverbindlich)\n\nWir stimmen Ihre Bestellung mit unserem Lieferanten ab. Nach dessen Bestätigung erhalten Sie die manuell freigegebene Rechnung. Zahlungsziel: 14 Tage nach tatsächlicher Lieferung.\n\nBei Gemeinschaftsbestellungen erhält jedes teilnehmende Unternehmen eine eigene Rechnung für seinen Mengen- und Frachtanteil.\n\nFreundliche Grüße\nStreusalz Großhandel\n${seller().name}\n${seller().email}\n${seller().phone}`;
-      await enqueue(tx, id, participant.email, `Vielen Dank für Ihre Bestellung ${number}`, body);
+      await enqueue(tx, id, participant.email, `Vielen Dank für Ihre Bestellung ${number}`, `${body}\n\nDies ist noch keine Auftragsannahme. Hier erhalten Sie die bei Ihrer Bestellabgabe geltenden AGB:\n\n${snapshot.termsText}\n\nDatenschutzhinweise zur Verarbeitung Ihrer Angaben, auch bei Eintragung durch einen Gemeinschaftsbesteller:\n${siteUrl()}/datenschutz`);
     }
     await enqueue(tx, id, process.env.ADMIN_EMAIL || seller().email, `Neue Bestellung ${number} · ${quote.totalTonnes} Tonnen`,
       `Neue gewerbliche Bestellung ${number}\n\n${PRODUCTS[input.product].name}\nGesamtmenge: ${quote.totalTonnes} Tonnen (${quote.trucks} Lkw)\nGesamt brutto: ${money(quote.grossCents)}\n\n${input.participants.map((participant, index) => `${participant.company}: ${participant.tonnes} t\n${participant.address.street}, ${participant.address.postcode} ${participant.address.city}\nKontakt: ${participant.contact}, ${participant.email}, ${participant.phone}\nTeilbetrag brutto: ${money(quote.lines[index].grossCents)}`).join("\n\n")}\n\nBitte manuell beim Lieferanten bestellen, dessen Bestätigung erfassen und erst danach die Rechnungen freigeben.\nGeschützte Verwaltung: ${siteUrl()}/admin/bestellungen/${id}`);
@@ -138,9 +142,9 @@ async function insertDocument(tx: Database, order: OrderRow, index: number, kind
     [document.id, order.id, index, kind, number, JSON.stringify(snapshot)]);
   const participant = snapshot.participant;
   const body = kind === "invoice"
-    ? `Guten Tag ${participant.contact},\n\nunser Lieferant hat Ihre Bestellung ${order.number} bestätigt. Anbei erhalten Sie Ihre Rechnung ${number} über ${money(snapshot.line.grossCents)} inklusive MwSt.\n\nVoraussichtlicher Liefertermin: ${displayDate(snapshot.line.deliveryDate)} (unverbindlich).\nZahlungsziel: 14 Tage nach der tatsächlichen Lieferung, nicht 14 Tage nach Rechnungsdatum. Das konkrete Fälligkeitsdatum teilen wir Ihnen nach der Lieferung mit.\n\nBitte geben Sie bei der Überweisung Ihre Rechnungsnummer ${number} an.\n\nFreundliche Grüße\nStreusalz Großhandel\n${snapshot.seller.name}\n${snapshot.seller.email}`
+    ? `Guten Tag ${participant.contact},\n\nunser Lieferant hat Ihre Bestellung ${order.number} bestätigt. Hiermit nehmen wir Ihr Angebot für Ihren Anteil von ${snapshot.line.tonnes} Tonnen ${PRODUCTS[snapshot.product].name} zu den bei Bestellung bestätigten Bedingungen ausdrücklich an.\n\nAnbei erhalten Sie Ihre Rechnung ${number} über ${money(snapshot.line.grossCents)} inklusive MwSt. Sie schulden nur Ihren eigenen Teilbetrag einschließlich des vereinbarten Frachtanteils, nicht die Rechnungsbeträge anderer Teilnehmer.\n\nVoraussichtlicher Liefertermin: ${displayDate(snapshot.line.deliveryDate)} (unverbindlich).\nZahlungsziel: 14 Tage nach der tatsächlichen Lieferung, nicht 14 Tage nach Rechnungsdatum. Das konkrete Fälligkeitsdatum teilen wir Ihnen nach der Lieferung mit.\n\nBitte geben Sie bei der Überweisung Ihre Rechnungsnummer ${number} an.\n\nFreundliche Grüße\nStreusalz Großhandel\n${snapshot.seller.name}\n${snapshot.seller.email}\n\nBei Bestellung vereinbarte AGB:\n\n${order.snapshot.termsText}`
     : `Guten Tag ${participant.contact},\n\nIhre Lieferung zur Bestellung ${order.number} wurde am ${displayDate(deliveredOn!)} als geliefert erfasst. Anbei erhalten Sie den Lieferschein ${number}.\n\nIhre Rechnung ${snapshot.invoiceNumber} ist am ${displayDate(dueDate(deliveredOn!))} fällig (14 Tage nach Lieferung). Sollten Sie bereits bezahlt haben, ist keine weitere Zahlung erforderlich.\n\nBei Rückfragen zur Lieferung kontaktieren Sie uns bitte.\n\nFreundliche Grüße\nStreusalz Großhandel\n${snapshot.seller.name}\n${snapshot.seller.email}`;
-  await enqueue(tx, order.id, participant.email, `${kind === "invoice" ? "Rechnung" : "Lieferschein"} ${number} · ${order.number}`, body, document.id);
+  await enqueue(tx, order.id, participant.email, `${kind === "invoice" ? "Auftragsannahme und Rechnung" : "Lieferschein"} ${number} · ${order.number}`, body, document.id);
   return document;
 }
 export async function releaseInvoices(db: Database, id: string, actor: string) {

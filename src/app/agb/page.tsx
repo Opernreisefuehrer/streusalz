@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { LegalDocument } from "@/components/legal-document";
+import { termsDocument } from "@/lib/legal";
+
 export const metadata: Metadata = { title: "AGB", alternates: { canonical: "/agb" } };
 export default function Terms() {
-  return <main id="main" className="container legal-content"><p className="eyebrow">GEWERBLICHE BESTELLUNGEN</p><h1>Allgemeine Geschäftsbedingungen</h1>{process.env.TERMS_TEXT ? <p>{process.env.TERMS_TEXT}</p> : <><div className="message message-info">Die rechtlich geprüften AGB sind noch nicht hinterlegt. Ein Online-Vertragsabschluss ist daher nicht möglich.</div><h2>Vorgesehene Bestellkonditionen</h2><p>Ausschließlich gewerbliche Kunden. Gesamtmengen in 23-Tonnen-Schritten. Pro Bestellung eine Gebindeart. Bis zu drei Unternehmen mit jeweils vollen Tonnen und maximal 20 Straßenkilometern zwischen allen Lieferadressen. Frachtanteile werden proportional nach Menge verteilt.</p><p>Produktpreise und Fracht zuzüglich 19 % MwSt. Voraussichtliche Lieferung fünf Werktage nach Bestellung, Montag bis Freitag ohne gesetzliche Feiertage des Bundeslandes. Lokale Sonderfeiertage werden bei der Auftragsfreigabe geprüft. Rechnung nach manueller Freigabe und Lieferantenbestätigung. Zahlungsziel: 14 Tage nach tatsächlicher Lieferung.</p><p>Dies ist eine Zusammenfassung der geplanten Abläufe, kein Ersatz für rechtlich geprüfte AGB. Vertragsschluss, Vertretung der Bestellgemeinschaft, Entladung, Gefahrübergang, Mängelrechte, Lieferverzug und Zahlungsbedingungen müssen vor dem Start verbindlich geregelt werden.</p></>}</main>;
+  return <LegalDocument document={termsDocument()} />;
 }

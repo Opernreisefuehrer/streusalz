@@ -7,6 +7,7 @@ import { createOrder, confirmSupplier, releaseInvoices, markDelivered, getOrder,
 import { drainOutbox } from "../src/lib/mail";
 import { buildPdf } from "../src/lib/pdf";
 import { fixture } from "./fixtures";
+import { legalTexts } from "../src/lib/legal";
 
 const sendMail = vi.hoisted(() => vi.fn());
 vi.mock("nodemailer", () => ({ default: { createTransport: () => ({ sendMail }) } }));
@@ -26,6 +27,9 @@ describe("persistent PostgreSQL order lifecycle", () => {
     const { order: input, quote } = fixture([10, 8, 5]);
     const order = await createOrder(db, input, quote);
     expect(order.status).toBe("ordered");
+    expect(order.snapshot.termsText).toBe(legalTexts().terms);
+    expect(order.snapshot.privacyText).toBe(legalTexts().privacy);
+    expect(order.snapshot.legalVersion).toBe(input.legalVersion);
     expect((await db.query("SELECT * FROM outbox WHERE order_id=$1", [order.id])).length).toBe(4);
     await expect(releaseInvoices(db, order.id, "admin")).rejects.toThrow("Lieferantenbestätigung");
     await expect(markDelivered(db, order.id, [quote.createdOn], "admin")).rejects.toThrow("Rechnungsfreigabe");
@@ -34,6 +38,7 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(sendMail.mock.calls[3][0].to).toBe("admin@example.invalid");
     expect(sendMail.mock.calls[3][0].text).toContain(`/admin/bestellungen/${order.id}`);
     expect(sendMail.mock.calls[0][0].text).toContain("14 Tage nach tatsächlicher Lieferung");
+    expect(sendMail.mock.calls[0][0].text).toContain(order.snapshot.termsText);
     await confirmSupplier(db, order.id, "SUPPLIER-TEST-42", "admin");
     expect((await getOrder(db, order.id)).status).toBe("supplier_confirmed");
     await releaseInvoices(db, order.id, "admin");
@@ -47,6 +52,8 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect((await PDFDocument.load(buffer)).getPageCount()).toBeGreaterThan(0);
     expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
     expect(sendMail.mock.calls.at(-1)![0].attachments[0].filename).toMatch(/^R-.*\.pdf$/);
+    expect(sendMail.mock.calls.at(-1)![0].text).toContain("Hiermit nehmen wir Ihr Angebot");
+    expect(sendMail.mock.calls.at(-1)![0].text).toContain(order.snapshot.termsText);
     await markDelivered(db, order.id, input.participants.map(() => quote.createdOn), "admin");
     expect((await getOrder(db, order.id)).status).toBe("delivered");
     expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
@@ -116,5 +123,11 @@ describe("persistent PostgreSQL order lifecycle", () => {
     await releaseInvoices(db, order.id, "admin");
     const [invoice] = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1", [order.id]);
     expect((await PDFDocument.load(await buildPdf(invoice))).getPageCount()).toBeGreaterThan(0);
+  });
+  it("rejects a stale legal version before storing an order or queueing customer emails", async () => {
+    const { order: input, quote } = fixture();
+    vi.stubEnv("TERMS_TEXT", "Changed contract terms for this test");
+    await expect(createOrder(db, input, quote)).rejects.toThrow("Vertrags- oder Datenschutzhinweise wurden geändert");
+    expect(await db.query("SELECT id FROM orders WHERE request_id=$1", [input.requestId])).toHaveLength(0);
   });
 });

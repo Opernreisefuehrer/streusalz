@@ -24,7 +24,7 @@ export default function Home() {
     <main id="main">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }} />
       <section className="hero">
-        <Image src="/images/streusalz-logistik.webp" alt="BigBags und Sackware in einer winterlichen Logistikszene – KI-generierte Illustration, keine Produktfotografie" fill priority sizes="100vw" className="hero-image" />
+        <Image src="/images/streusalz-logistik-verbund.webp" alt="BigBags mit feinkörnigem Streusalz und eine volle 1-Tonnen-Palette mit 40 Säcken à 25 kg in versetzten Lagen – KI-generierte Illustration, keine Produktfotografie" fill priority sizes="100vw" className="hero-image" />
         <div className="hero-shade" />
         <div className="container hero-content">
           <p className="eyebrow"><span className="dot" /> STREUSALZ DIREKT VOM GROSSHÄNDLER</p>
