@@ -35,7 +35,7 @@ export default function Home() {
         </div>
         <span className="image-note">Illustrative Darstellung</span>
       </section>
-      <div className="benefit-strip"><div className="container"><span><i aria-hidden="true">↗</i> Bundesweite Lieferung</span><span><i aria-hidden="true">▦</i> Volle Tonnen. Klare Preise.</span><span><i aria-hidden="true">✓</i> Kauf auf Rechnung</span><span><i aria-hidden="true">↔</i> Gemeinsam günstiger teilen</span></div></div>
+      <div className="benefit-strip"><div className="container"><span><i aria-hidden="true">↗</i> Bundesweite Lieferung</span><span><i aria-hidden="true">▦</i> Klare Preise</span><span><i aria-hidden="true">✓</i> Kauf auf Rechnung</span><span><i aria-hidden="true">↔</i> Gemeinsam günstiger teilen</span></div></div>
       <section className="section container" id="produkte">
         <div className="section-heading"><div><p className="eyebrow">ZWEI GEBINDE. EIN KLARES ZIEL.</p><h2>Das richtige Salz.<br />Für Ihren Einsatz.</h2></div><p>Für Winterdienste, Unternehmen und gewerbliche Anwender. Wählen Sie Ihre Gebindeart — wir kümmern uns um die Kalkulation.</p></div>
         <div className="product-grid">

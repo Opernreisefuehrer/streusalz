@@ -74,6 +74,19 @@ Passwort-Hashing und Anmeldebegrenzung. Ein Passwortwechsel macht alte Sitzungen
 
 ### Bestellablauf
 
+Standard ist eine Bestellung fuer ein Unternehmen mit einem Rechnungsempfaenger
+und einer Lieferadresse; eine abweichende Rechnungsanschrift ist optional.
+Weitere Unternehmen werden nur im aufklappbaren Sonderfall
+Gemeinschaftsbestellung hinzugefuegt. Der ausdrueckliche Einstieg
+`/bestellen?gemeinschaft=1` oeffnet weiterhin die Gemeinschaftsplanung.
+
+Im Standardablauf liefert `/api/freight-estimate` nach Eingabe von Gebinde,
+23-Tonnen-Menge und deutscher Liefer-PLZ eine ausdruecklich unverbindliche
+Schaetzung anhand der Lkw-Strassenstrecke zum PLZ-Gebiet. Sie nutzt denselben
+Frachtsatz wie die verbindliche Kalkulation, enthaelt aber keinen Quote-Token
+und berechtigt nicht zur Bestellung. Erst die vollstaendige Lieferadresse
+ermoeglicht die verbindliche Kalkulation ueber `/api/quote`.
+
 1. Server prüft Mengen und Adressen und berechnet die echte Straßenroute über
    OpenRouteService (Adress-Geocoding und `driving-hgv`-Distanzmatrix).
 2. Eine signierte Kalkulation gilt 30 Minuten, nur am Bestelltag und für dieselben

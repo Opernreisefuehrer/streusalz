@@ -3,8 +3,8 @@ import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import { PRODUCTS, TRUCK_TONNES } from "./catalog";
 import { addWorkingDays, berlinDate, STATES } from "./delivery-date";
-import { quoteInputSchema, type QuoteInput } from "./validation";
-import { calculateRoute } from "./routing";
+import { freightEstimateInputSchema, quoteInputSchema, type FreightEstimateInput, type QuoteInput } from "./validation";
+import { calculatePostcodeDistance, calculateRoute } from "./routing";
 import { signToken, verifyToken } from "./tokens";
 import { AppError } from "./errors";
 
@@ -32,7 +32,34 @@ export const quoteSchema = z.object({
   lines: z.array(lineSchema),
 });
 export type Quote = z.infer<typeof quoteSchema>;
+export type FreightEstimate = {
+  nonBinding: true;
+  postcode: string;
+  totalTonnes: number;
+  trucks: number;
+  goodsCents: number;
+  freightCents: number;
+  netCents: number;
+  vatCents: number;
+  grossCents: number;
+};
 
+function roadFreightCents(metres: number, trucks: number) {
+  return Math.round(metres / 1000 * 200) * trucks;
+}
+export async function createFreightEstimate(input: FreightEstimateInput): Promise<FreightEstimate> {
+  input = freightEstimateInputSchema.parse(input);
+  const trucks = input.tonnes / TRUCK_TONNES;
+  const freightCents = roadFreightCents(await calculatePostcodeDistance(input.postcode), trucks);
+  const goodsCents = input.tonnes * PRODUCTS[input.product].priceCents;
+  const netCents = goodsCents + freightCents;
+  const vatCents = Math.round(netCents * 19 / 100);
+  const grossCents = netCents + vatCents;
+  if (![freightCents, goodsCents, netCents, vatCents, grossCents].every(Number.isSafeInteger)) {
+    throw new AppError("Diese Menge überschreitet die technische Grenze der Online-Preisberechnung. Bitte kontaktieren Sie uns.");
+  }
+  return { nonBinding: true, postcode: input.postcode, totalTonnes: input.tonnes, trucks, goodsCents, freightCents, netCents, vatCents, grossCents };
+}
 export function proportionalShares(totalCents: number, weights: number[]) {
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   const shares = weights.map(weight => Math.floor(totalCents * weight / totalWeight));
@@ -49,7 +76,7 @@ export function priceQuote(input: QuoteInput, route: Awaited<ReturnType<typeof c
   input = quoteInputSchema.parse(input);
   const totalTonnes = input.deliveries.reduce((sum, delivery) => sum + delivery.tonnes, 0);
   const trucks = totalTonnes / TRUCK_TONNES;
-  const freightCents = Math.round(route.metres / 1000 * 200) * trucks;
+  const freightCents = roadFreightCents(route.metres, trucks);
   if (!Number.isSafeInteger(freightCents) || !Number.isSafeInteger(totalTonnes * PRODUCTS[input.product].priceCents + freightCents)) {
     throw new AppError("Diese Menge überschreitet die technische Grenze der Online-Preisberechnung. Bitte kontaktieren Sie uns.");
   }

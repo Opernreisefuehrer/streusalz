@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { AppError } from "./errors";
-import type { QuoteInput } from "./validation";
+import { postcodeSchema, type QuoteInput } from "./validation";
 import { STATES, type State } from "./delivery-date";
 
 const regions: Record<string, State> = {
@@ -9,11 +9,12 @@ const regions: Record<string, State> = {
   Hessen: "HE", "Mecklenburg-Vorpommern": "MV", Niedersachsen: "NI", "Nordrhein-Westfalen": "NW",
   "Rheinland-Pfalz": "RP", Saarland: "SL", Sachsen: "SN", "Sachsen-Anhalt": "ST", "Schleswig-Holstein": "SH", Thüringen: "TH",
 };
+const dispatchCoordinates = [23.8787, 47.1425];
 const geocodeSchema = z.object({
   features: z.array(z.object({
     geometry: z.object({ coordinates: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]) }),
     properties: z.object({
-      label: z.string(), postalcode: z.string().optional(), country_a: z.string().optional(),
+      label: z.string(), name: z.string().optional(), postalcode: z.string().optional(), country_a: z.string().optional(),
       region: z.string().optional(), region_a: z.string().optional(), confidence: z.number().optional(),
       layer: z.string().optional(),
     }),
@@ -41,6 +42,29 @@ async function routingRequest(path: string, body?: unknown) {
   }
   return response.json() as Promise<unknown>;
 }
+async function roadDistances(coordinates: number[][]) {
+  const matrix = z.object({ distances: z.array(z.array(z.number().nonnegative().nullable())) }).safeParse(
+    await routingRequest("v2/matrix/driving-hgv", { locations: coordinates, metrics: ["distance"], units: "m" }),
+  );
+  if (!matrix.success || matrix.data.distances.length !== coordinates.length || matrix.data.distances.some(row => row.length !== coordinates.length)) {
+    throw new AppError("Der Routenservice hat eine ungültige Antwort geliefert.", 503);
+  }
+  return matrix.data.distances;
+}
+export async function calculatePostcodeDistance(postcode: string) {
+  postcode = postcodeSchema.parse(postcode);
+  const search = new URLSearchParams({ text: postcode, "boundary.country": "DE", layers: "postalcode", size: "3" });
+  const parsed = geocodeSchema.safeParse(await routingRequest(`geocode/search?${search}`));
+  if (!parsed.success) throw new AppError("Der Adressservice hat eine ungültige Antwort geliefert.", 503);
+  const match = parsed.data.features.find(feature => feature.properties.country_a === "DEU"
+    && feature.properties.layer === "postalcode"
+    && (feature.properties.postalcode ?? feature.properties.name) === postcode);
+  if (!match) throw new AppError("Die Liefer-PLZ konnte nicht eindeutig in Deutschland gefunden werden. Bitte prüfen Sie Ihre Postleitzahl.");
+  const distances = await roadDistances([dispatchCoordinates, match.geometry.coordinates]);
+  const metres = distances[0][1];
+  if (metres === null || !Number.isFinite(metres) || metres <= 0) throw new AppError("Für diese Postleitzahl wurde keine befahrbare Lkw-Strecke gefunden.");
+  return metres;
+}
 export async function calculateRoute(input: QuoteInput) {
   const locations = await Promise.all(input.deliveries.map(async ({ address }) => {
     const search = new URLSearchParams({ text: `${address.street}, ${address.postcode} ${address.city}`, "boundary.country": "DE", layers: "address", size: "3" });
@@ -57,14 +81,8 @@ export async function calculateRoute(input: QuoteInput) {
     return { coordinates: match.geometry.coordinates, state, label: match.properties.label };
   }));
   // The internal dispatch point is deliberately never returned to the storefront.
-  const coordinates = [[23.8787, 47.1425], ...locations.map(location => location.coordinates)];
-  const matrix = z.object({ distances: z.array(z.array(z.number().nonnegative().nullable())) }).safeParse(
-    await routingRequest("v2/matrix/driving-hgv", { locations: coordinates, metrics: ["distance"], units: "m" }),
-  );
-  if (!matrix.success || matrix.data.distances.length !== coordinates.length || matrix.data.distances.some(row => row.length !== coordinates.length)) {
-    throw new AppError("Der Routenservice hat eine ungültige Antwort geliefert.", 503);
-  }
-  const distances = matrix.data.distances;
+  const coordinates = [dispatchCoordinates, ...locations.map(location => location.coordinates)];
+  const distances = await roadDistances(coordinates);
   for (let i = 1; i < coordinates.length; i++) {
     for (let j = 1; j < coordinates.length; j++) {
       if (i === j) continue;

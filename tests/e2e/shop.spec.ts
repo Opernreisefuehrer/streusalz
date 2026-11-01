@@ -59,6 +59,78 @@ test("professional storefront, navigation and responsive layout", async ({ page 
   await expect(page.getByRole("button", { name: /Zahlungspflichtig bestellen/ })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+test("single company is the default and community ordering is an optional special case", async ({ page }) => {
+  await page.goto("/bestellen");
+  await expect(page.getByRole("heading", { name: "Ihr Unternehmen", exact: true })).toBeVisible();
+  await expect(page.locator(".participant-block")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Rechnungsempfänger & Lieferung" })).toBeVisible();
+  await expect(page.getByLabel("Menge in vollen Tonnen")).toHaveValue("23");
+  await expect(page.getByLabel("Menge in vollen Tonnen")).toHaveAttribute("step", "23");
+  await expect(page.getByRole("checkbox", { name: /Ich bestelle ausschließlich gewerblich/ })).not.toHaveAccessibleName(/Teilnehmer/);
+  await expect(page.getByRole("complementary", { name: "Preisübersicht" })).toContainText("Lieferadresse / Rechnung");
+  const add = page.getByRole("button", { name: "+ Weiteres Unternehmen hinzufügen", exact: true });
+  await expect(add).toBeHidden();
+  await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Unternehmen", { exact: true }).click();
+  await add.click();
+  await expect(page.getByRole("heading", { name: "Ihre Bestellgemeinschaft" })).toBeVisible();
+  await expect(page.locator(".participant-block")).toHaveCount(2);
+  await expect(page.getByLabel("Menge in vollen Tonnen").first()).toHaveAttribute("step", "1");
+  await expect(page.getByLabel("Menge in vollen Tonnen").first()).toHaveValue("22");
+  await add.click();
+  await expect(page.locator(".participant-block")).toHaveCount(3);
+  await expect(add).toHaveCount(0);
+  await page.getByRole("button", { name: "Entfernen", exact: true }).last().click();
+  await page.getByRole("button", { name: "Entfernen", exact: true }).last().click();
+  await expect(page.locator(".participant-block")).toHaveCount(1);
+  await expect(page.getByLabel("Menge in vollen Tonnen")).toHaveValue("23");
+  await expect(page.getByRole("heading", { name: "Rechnungsempfänger & Lieferung" })).toBeVisible();
+  await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Unternehmen", { exact: true }).click();
+  await add.click();
+  const secondCompany = page.locator(".participant-block").nth(1);
+  await secondCompany.getByRole("checkbox", { name: "Abweichende Rechnungsanschrift" }).check();
+  await expect(secondCompany.getByLabel("Rechnungsanschrift: Straße und Hausnummer")).toBeVisible();
+});
+test("postcode estimate needs no company details and never unlocks checkout", async ({ page }) => {
+  const requests: unknown[] = [];
+  await page.route("**/api/freight-estimate", async route => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ json: {
+      nonBinding: true, postcode: "55118", totalTonnes: 23, trucks: 1,
+      goodsCents: 563500, freightCents: 300000, netCents: 863500, vatCents: 164065, grossCents: 1027565,
+    } });
+  });
+  await page.goto("/bestellen");
+  const postcode = page.getByLabel("Liefer-PLZ für die Schätzung");
+  const estimateButton = page.getByRole("button", { name: /Lieferkosten nach PLZ schätzen/ });
+  await expect(estimateButton).toBeDisabled();
+  await postcode.fill("55118");
+  await estimateButton.click();
+  await expect(page.getByRole("status").filter({ hasText: "Unverbindliche PLZ-Schätzung" })).toContainText("3.000,00");
+  expect(requests).toEqual([{ product: "bigbag", postcode: "55118", tonnes: 23 }]);
+  await expect(page.getByLabel("Firmenname")).toHaveValue("");
+  await expect(page.getByRole("button", { name: /Zahlungspflichtig bestellen/ })).toBeDisabled();
+  await expect(page.locator(".participant-block").getByLabel("Postleitzahl")).toHaveValue("55118");
+  await page.getByLabel("Menge in vollen Tonnen").fill("46");
+  await expect(page.getByText("Unverbindliche PLZ-Schätzung", { exact: true })).toHaveCount(0);
+  await estimateButton.click();
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual({ product: "bigbag", postcode: "55118", tonnes: 46 });
+  await page.getByRole("radio", { name: /25-kg-Sackware/ }).check();
+  await expect(page.getByText("Unverbindliche PLZ-Schätzung", { exact: true })).toHaveCount(0);
+  await estimateButton.click();
+  await postcode.fill("10115");
+  await expect(page.getByText("Unverbindliche PLZ-Schätzung", { exact: true })).toHaveCount(0);
+});
+test("postcode estimate errors are visible next to the postcode form", async ({ page }) => {
+  await page.route("**/api/freight-estimate", route => route.fulfill({
+    status: 503, json: { error: "Der Lieferkostenservice ist derzeit nicht erreichbar." },
+  }));
+  await page.goto("/bestellen");
+  await page.getByLabel("Liefer-PLZ für die Schätzung").fill("55118");
+  await page.getByRole("button", { name: /Lieferkosten nach PLZ schätzen/ }).click();
+  await expect(page.locator('.message-error[role="alert"]')).toContainText("Lieferkostenservice ist derzeit nicht erreichbar");
+  await expect(page.getByRole("button", { name: /Zahlungspflichtig bestellen/ })).toBeDisabled();
+});
 test("quantity rules, product separation and clear missing routing configuration", async ({ page }) => {
   await page.goto("/bestellen?produkt=bags");
   await expect(page.getByRole("radio", { name: /25-kg-Sackware/ })).toBeChecked();

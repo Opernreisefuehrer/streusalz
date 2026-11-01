@@ -1,11 +1,18 @@
 import { z } from "zod";
 
 const text = z.string().trim().min(1, "Bitte ausfüllen.").max(160);
+export const postcodeSchema = z.string().regex(/^\d{5}$/, "Bitte eine deutsche, fünfstellige Postleitzahl angeben.");
 export const addressSchema = z.object({
   street: text,
-  postcode: z.string().regex(/^\d{5}$/, "Bitte eine deutsche, fünfstellige Postleitzahl angeben."),
+  postcode: postcodeSchema,
   city: text,
 });
+export const freightEstimateInputSchema = z.object({
+  product: z.enum(["bigbag", "bags"]),
+  postcode: postcodeSchema,
+  tonnes: z.number().int().min(23).refine(value => Number.isSafeInteger(value) && value % 23 === 0, "Die Menge muss 23, 46, 69 … Tonnen ergeben."),
+});
+export type FreightEstimateInput = z.infer<typeof freightEstimateInputSchema>;
 export const participantSchema = z.object({
   company: text,
   contact: text,
