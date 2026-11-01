@@ -178,13 +178,17 @@ und Backups sind beim Betreiber einzurichten; dieses Projekt ist kein Buchhaltun
 
 ## Bilder und Schriften
 
-Das Startseitenmotiv wurde für dieses Projekt KI-generiert; die SVG-Gebindeillustrationen
-sind eigener Code. Beides ist als Illustration gekennzeichnet, nicht als Produktfotografie.
+Das Startseitenmotiv wurde für dieses Projekt KI-generiert und ist als Illustration
+gekennzeichnet, nicht als Produktfotografie. Die SVG-Gebindegrafiken sind eigener Code
+und als technische Illustrationen mit blauem Linienraster, Nähten und Hinweislinien
+gestaltet, ohne fotorealistische Texturen oder Schatten.
 Das Motiv orientiert sich für feine Salzstruktur und BigBag-Ausführung an bereitgestellten
 Referenzfotos; die Originalfotos werden nicht als öffentliche Website-Assets übernommen.
-Die Sackware wird im Verbund statt in senkrechten Sack-Säulen dargestellt. Die SVG zeichnet
-acht wechselnde Lagen mit jeweils fünf Säcken à 25 kg; an der Vorderseite wechseln sich
-zwei lange Sackseiten und drei kurze Sackseiten ab. Die dreieckige Schneeflocke wird in Kopf-/Fußzeile
+Die BigBag-Zeichnung kennzeichnet das Füllgewicht von 1.000 kg. Die Sackware wird als
+schematische Vorderansicht einer Palette mit versetzten Sacklagen dargestellt; hintere
+Säcke sind verdeckt. Die Beschriftung erklärt 40 Säcke à 25 kg, insgesamt 1.000 kg.
+Die Zeichnungen sind nicht maßstabsgetreu und enthalten keine unbestätigten Abmessungen.
+Die dreieckige Schneeflocke wird in Kopf-/Fußzeile
 und als Website-Icon verwendet.
 Es werden keine fremden Produktfotos oder Bewertungen verwendet. Eine pauschale Garantie
 der rechtlichen Schutzfreiheit KI-generierter Inhalte ist nicht möglich.

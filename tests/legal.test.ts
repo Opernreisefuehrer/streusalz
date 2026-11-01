@@ -81,10 +81,19 @@ describe("consistent legal content and accurate technical notices", () => {
     vi.stubEnv("PRIVACY_HOSTING_LOG_RETENTION_DAYS", "unknown");
     expect(isLiveReady()).toBe(false);
   });
-  it("draws a 40-sack pallet with eight layers of five sacks, not a five-sack pile", () => {
+  it("shows labelled technical drawings with staggered sack fronts and truthful weights", () => {
     const html = renderToStaticMarkup(PackageArt({ kind: "bags" }));
-    expect(html.match(/data-sack="true"/g)).toHaveLength(40);
     expect(html.match(/data-layer="/g)).toHaveLength(8);
-    expect(html).toContain("40 × 25 kg = 1.000 kg");
+    expect(html.match(/data-visible-sack="true"/g)).toHaveLength(20);
+    expect(html).toContain("40 × 25 kg = 1.000 kg je Palette");
+    expect(html).toContain("hintere Säcke sind verdeckt");
+    const bigbag = renderToStaticMarkup(PackageArt({ kind: "bigbag" }));
+    expect(bigbag).toContain("BigBag mit 1.000 kg Füllgewicht");
+    expect(bigbag).toContain("1 BigBag = 1 Tonne");
+    for (const schema of [html, bigbag]) {
+      expect(schema).not.toContain("linearGradient");
+      expect(schema).not.toContain("filter");
+      expect(schema).toContain("drawing-grid-");
+    }
   });
 });

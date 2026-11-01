@@ -31,22 +31,35 @@ test("admin is protected and preview is not indexable", async ({ page, request }
   const document = await request.get("/api/admin/documents/00000000-0000-4000-8000-000000000000");
   expect(document.status()).toBe(401);
 });
-test("new triangular snowflake and complete 40-sack pallet appear consistently", async ({ page }) => {
+test("snowflake and labelled technical package drawings appear consistently", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('img.brand-icon[src="/snowflake.svg"]')).toHaveCount(2);
-  const pallet = page.getByRole("img", { name: /40 Säcke à 25 kg in acht Lagen/ });
-  await expect(pallet.locator("[data-sack]")).toHaveCount(40);
+  const bigbag = page.getByRole("img", { name: /Technische Illustration: BigBag mit 1.000 kg/ });
+  await expect(bigbag).toBeVisible();
+  await expect(bigbag).toContainText("1 BigBag = 1 Tonne");
+  const pallet = page.getByRole("img", { name: /Technische Illustration: Palette mit 40 Säcken à 25 kg/ });
+  await expect(pallet).toBeVisible();
   await expect(pallet.locator("[data-layer]")).toHaveCount(8);
-  await expect(pallet.locator('[data-layer="1"] text')).toHaveCount(2);
-  await expect(pallet.locator('[data-layer="2"] text')).toHaveCount(3);
-  const layers = await pallet.locator("[data-layer]").evaluateAll(elements => elements.map(layer =>
-    Array.from(layer.querySelectorAll("[data-sack]")).map(sack => ({
-      position: sack.getAttribute("transform"),
-      shape: sack.querySelector("path")?.getAttribute("d"),
-    })),
-  ));
-  expect(layers[0]).not.toEqual(layers[1]);
-  for (let index = 0; index < layers.length; index++) expect(layers[index]).toEqual(layers[index % 2]);
+  await expect(pallet.locator("[data-visible-sack]")).toHaveCount(20);
+  for (let layer = 1; layer <= 8; layer++) {
+    await expect(pallet.locator(`[data-layer="${layer}"] [data-visible-sack]`)).toHaveCount(layer % 2 === 1 ? 2 : 3);
+  }
+  await expect(pallet).toContainText("40 × 25 kg = 1.000 kg je Palette");
+  await expect(page.locator(".visual-caption")).toHaveText([
+    "Technische Illustration · nicht maßstabsgetreu",
+    "Technische Illustration · nicht maßstabsgetreu",
+  ]);
+  expect(await page.locator(".product-visual").evaluateAll(visuals => visuals.every(visual => {
+    const drawing = visual.querySelector("svg");
+    const caption = visual.querySelector(".visual-caption");
+    if (!drawing || !caption) return false;
+    const drawingBounds = drawing.getBoundingClientRect();
+    const captionBounds = caption.getBoundingClientRect();
+    const visualBounds = visual.getBoundingClientRect();
+    return captionBounds.top >= drawingBounds.bottom && captionBounds.bottom <= visualBounds.bottom
+      && drawingBounds.width <= visualBounds.width;
+  }))).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect(page.locator(".hero-image")).toHaveAttribute("alt", /volle 1-Tonnen-Palette mit 40 Säcken/);
   await expect(page.locator(".hero-image")).toHaveAttribute("alt", /feinkörnigem Streusalz/);
 });

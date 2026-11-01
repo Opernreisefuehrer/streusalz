@@ -1,22 +1,51 @@
 export function PackageArt({ kind }: { kind: "bigbag" | "bags" }) {
-  return <svg viewBox="0 0 400 270" role="img" aria-label={kind === "bigbag" ? "Illustration eines BigBags auf Palette" : "Illustration einer vollen Palette: 40 Säcke à 25 kg in acht Lagen, insgesamt 1.000 kg"} className="package-art">
-    <defs><linearGradient id={`fabric-${kind}`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#fff" /><stop offset="1" stopColor="#c8d2df" /></linearGradient><filter id={`shadow-${kind}`}><feGaussianBlur stdDeviation="8" /></filter></defs>
-    <ellipse cx="210" cy="244" rx="120" ry="13" fill="#8fa1b8" opacity=".25" filter={`url(#shadow-${kind})`} />
-    <path d="M85 218l206-5 39 17-211 10z" fill="#a28769" /><path d="M119 240l211-10v12l-211 10z" fill="#6b5743" /><path d="M85 218v13l34 21v-12z" fill="#8d7255" />
-    {kind === "bigbag" ? <><path d="M127 86q-20-62 10-65q19 3 16 63M253 78q-8-60 19-61q23 3 12 72" fill="none" stroke="#e6e9ed" strokeWidth="12" /><path d="M111 90q84-30 177-9l13 126q-71 27-192 13z" fill={`url(#fabric-${kind})`} stroke="#bac7d4" strokeWidth="2" /><path d="M110 91q40 14 58 11l-2 121M284 84l-18 136" fill="none" stroke="#a8b6c6" strokeWidth="2" opacity=".5" /><path d="M112 91q79-35 176-10q-30 29-91 26z" fill="#f4f6f9" /><rect x="181" y="139" width="78" height="52" rx="2" fill="#172d49" /><text x="220" y="161" textAnchor="middle" fontSize="10" fill="white" fontFamily="Arial">STREUSALZ</text><text x="220" y="178" textAnchor="middle" fontSize="13" fill="#f5ba63" fontFamily="Arial">1.000 kg</text></> : <>
+  return <svg viewBox="0 0 400 270" role="img" aria-label={kind === "bigbag" ? "Technische Illustration: BigBag mit 1.000 kg Füllgewicht, nicht maßstabsgetreu" : "Technische Illustration: Palette mit 40 Säcken à 25 kg, insgesamt 1.000 kg. Schematische Vorderansicht mit versetzten Sacklagen; hintere Säcke sind verdeckt."} className="package-art" fill="#285379" fontFamily="Arial, sans-serif" textAnchor="middle">
+    <defs>
+      <pattern id={`drawing-grid-${kind}`} width="16" height="16" patternUnits="userSpaceOnUse">
+        <path d="M16 0H0V16" fill="none" stroke="#cad9e6" strokeWidth=".5" />
+      </pattern>
+    </defs>
+    <rect x="24" y="69" width="352" height="174" fill={`url(#drawing-grid-${kind})`} />
+    <path d="M150 71V243M38 222H265" fill="none" stroke="#91a9bd" strokeWidth=".8" strokeDasharray="5 4" />
+    {kind === "bigbag" ? <>
+      <g stroke="#285379" strokeWidth="1.8" strokeLinejoin="round">
+        <path d="M91 96V83q0-19 15-19t15 19v13M183 96V83q0-19 15-19t15 19v13" fill="none" />
+        <path d="M80 96q72-16 144 0l10 115q-82 19-164 0z" fill="#f8fafc" />
+        <path d="M80 96q72 18 144 0M72 203q80 17 160 0" fill="none" />
+        <path d="M99 99l-8 106M205 99l8 106" fill="none" strokeWidth="1" strokeDasharray="3 3" />
+        <path d="M80 110l-8 87M224 110l8 87" fill="none" strokeWidth=".7" />
+        <rect x="126" y="144" width="52" height="35" fill="none" strokeWidth="1" />
+        <path d="M136 154h32M136 161h32M136 168h20" fill="none" strokeWidth=".7" />
+      </g>
+      <path d="M229 151h26l18-23h17" fill="none" stroke="#285379" strokeWidth="1" />
+      <circle cx="229" cy="151" r="2.5" />
+      <text x="275" y="100" textAnchor="start" fontSize="13">Füllgewicht</text>
+      <text x="275" y="119" textAnchor="start" fontSize="18" fontWeight="700">1.000 kg</text>
+      <text x="200" y="263" fontSize="16">1 BigBag = 1 Tonne</text>
+    </> : <>
       {Array.from({ length: 8 }, (_, layer) => {
-        const arrangement = layer % 2 === 0
-          ? [{ x: 126, y: 186, width: 58 }, { x: 186, y: 184, width: 58 }, { x: 246, y: 182, width: 58 }, { x: 101, y: 201, width: 94 }, { x: 199, y: 198, width: 94 }]
-          : [{ x: 126, y: 186, width: 88 }, { x: 218, y: 183, width: 88 }, { x: 101, y: 201, width: 60 }, { x: 166, y: 200, width: 60 }, { x: 231, y: 198, width: 60 }];
-        return <g key={layer} data-layer={layer + 1} transform={`translate(0,${-layer * 20})`}>
-        {arrangement.map(({ x, y, width }, sack) => <g key={sack} data-sack="true" transform={`translate(${x} ${y})`}>
-          <path d={`M4 0Q${width / 2} -5 ${width - 4} 0Q${width + 5} 8 ${width - 3} 18Q${width / 2} 22 3 18Q-7 10 4 0Z`} fill={`url(#fabric-${kind})`} stroke="#afbfce" strokeWidth="1" />
-          <path d={`M7 10H${width - 7}`} stroke="#b6c5d3" opacity=".6" />
-          {y >= 198 && <><rect x={width / 2 - 20} y="5" width="40" height="11" rx="2" fill="#172d49" /><text x={width / 2} y="13" textAnchor="middle" fontSize="6" fill="#fff" fontFamily="Arial">25 kg</text></>}
+        const visibleSacks = layer % 2 === 0 ? 2 : 3;
+        const width = 180 / visibleSacks;
+        return <g key={layer} data-layer={layer + 1} transform={`translate(60 ${205 - layer * 16})`}>
+          {Array.from({ length: visibleSacks }, (_, sack) => <g key={sack} data-visible-sack="true" transform={`translate(${sack * width} 0)`}>
+            <path d={`M5 1H${width - 5}Q${width + 1} 8 ${width - 5} 15H5Q-1 8 5 1Z`} fill="#f8fafc" stroke="#285379" strokeWidth="1.3" />
+            <path d={`M8 5V11M${width - 8} 5V11`} fill="none" stroke="#285379" strokeWidth=".7" />
+            <path d={`M15 8H${width - 15}`} fill="none" stroke="#91a9bd" strokeWidth=".7" strokeDasharray="2 3" />
+          </g>)}
         </g>;
-        })}
-      </g>)}
-      <rect x="153" y="228" width="118" height="17" rx="3" fill="#172d49" /><text x="212" y="240" textAnchor="middle" fontSize="9" fill="#fff" fontFamily="Arial">40 × 25 kg = 1.000 kg</text>
+      })}
+      <g fill="#f8fafc" stroke="#285379" strokeWidth="1.3">
+        <rect x="52" y="222" width="196" height="7" />
+        <rect x="61" y="229" width="24" height="10" />
+        <rect x="138" y="229" width="24" height="10" />
+        <rect x="215" y="229" width="24" height="10" />
+        <path d="M52 241h196" fill="none" />
+      </g>
+      <path d="M237 149h21l15-21h17" fill="none" stroke="#285379" strokeWidth="1" />
+      <circle cx="237" cy="149" r="2.5" />
+      <text x="275" y="100" textAnchor="start" fontSize="18" fontWeight="700">40 Säcke</text>
+      <text x="275" y="119" textAnchor="start" fontSize="15">à 25 kg</text>
+      <text x="200" y="263" fontSize="16">40 × 25 kg = 1.000 kg je Palette</text>
     </>}
   </svg>;
 }
