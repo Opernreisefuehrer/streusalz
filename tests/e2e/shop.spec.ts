@@ -1,4 +1,46 @@
 import { test, expect } from "@playwright/test";
+test("homepage preserves the legacy search title, topic and canonical identity", async ({ page, request }) => {
+  await page.goto("/");
+  const description = "Streusalz für Wege, Einfahrten und Straßen: BigBags und 25-kg-Säcke ab 23 Tonnen. Bundesweite Lieferung auf Rechnung, nur für Gewerbe.";
+  await expect(page).toHaveTitle("Streusalz Großhandel");
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", description);
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "Streusalz Großhandel");
+  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute("content", description);
+  const canonical = page.locator('link[rel="canonical"]');
+  await expect(canonical).toHaveCount(1);
+  const canonicalUrl = await canonical.getAttribute("href");
+  if (!canonicalUrl) throw new Error("The homepage canonical URL is missing.");
+  expect(new URL(canonicalUrl).pathname).toBe("/");
+  await expect(page.locator("h1")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: /Streusalz für Wege,\s*Einfahrten und Straßen\./ })).toBeVisible();
+  const response = await request.get("/");
+  expect(await response.text()).toContain("<title>Streusalz Großhandel</title>");
+  const legacy = await request.get("/index.html", { maxRedirects: 0 });
+  expect(legacy.status()).toBe(308);
+  expect(legacy.headers().location).toBe("/");
+});
+test("wholesale header uses the brand domain without duplicate slogans or overlaps", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".site-header .brand-domain")).toHaveText("STREUSALZ-GROSSHANDEL.DE");
+  await expect(page.locator(".site-footer .brand-domain")).toHaveText("STREUSALZ-GROSSHANDEL.DE");
+  await expect(page.locator(".site-header .brand-tagline")).toHaveText("25-kg-Säcke · BigBags");
+  await expect(page.locator(".topbar")).toContainText("Direkt vom Großhändler · Bundesweite Lieferung · Faire Preise");
+  await expect(page.locator(".hero .eyebrow")).not.toContainText(/direkt vom großhändler/i);
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => window.innerWidth)).toBe(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await page.locator(".header-inner").evaluate(header => {
+      const items = Array.from(header.children).map(child => child.getBoundingClientRect()).filter(bounds => bounds.width > 0);
+      return items.every((bounds, index) => index === 0 || bounds.left >= items[index - 1].right);
+    })).toBe(true);
+    if (width === 320) {
+      await page.getByRole("button", { name: "Menü öffnen" }).click();
+      await expect(page.getByRole("navigation", { name: "Mobile Hauptnavigation" }).getByRole("link", { name: /Bestellung planen/ })).toHaveAttribute("href", "/bestellen");
+      await page.getByRole("button", { name: "Menü schließen" }).click();
+    }
+  }
+});
 test("professional storefront, navigation and responsive layout", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveTitle(/Streusalz Großhandel/);
@@ -30,6 +72,10 @@ test("admin is protected and preview is not indexable", async ({ page, request }
   expect(await result.text()).toContain("Disallow: /");
   const document = await request.get("/api/admin/documents/00000000-0000-4000-8000-000000000000");
   expect(document.status()).toBe(401);
+  await page.goto("/bestellen");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  const sitemap = await request.get("/sitemap.xml");
+  expect(await sitemap.text()).not.toContain("/bestellen</loc>");
 });
 test("provided brand logo, favicons and technical package drawings appear consistently", async ({ page, request }) => {
   await page.goto("/");

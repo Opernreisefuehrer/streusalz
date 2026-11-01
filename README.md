@@ -115,6 +115,16 @@ Der normale Erstversand erfolgt unmittelbar nach der Kunden-/Adminaktion.
 6. `isLiveReady()` verhindert Bestellungen bis die Mindestkonfiguration vollständig ist.
    Das ist **keine** rechtliche Prüfung der Texte oder technische Zustellgarantie.
 
+Die Suchmaschinenfreigabe kann unabhängig erfolgen: In Vercel **nur für Production**
+`SITE_INDEXING_ENABLED=true` und `SITE_URL=https://www.streusalz-grosshandel.de` setzen,
+anschließend ein neues Produktionsdeployment erstellen. `VERCEL_ENV=production`
+wird von Vercel gesetzt; lokale Builds und Preview-Deployments bleiben gesperrt.
+`SHOP_ENABLED` und `LEGAL_READY` dadurch nicht vorzeitig einschalten.
+Ohne explizite SEO-Einstellung bleibt die bisherige vollständige Shopfreigabe Voraussetzung;
+`SITE_INDEXING_ENABLED=false` sperrt die Indexierung ausdrücklich auch beim fertigen Shop.
+Nach dem Deployment auf der echten Domain Robots-Metadaten, `robots.txt` und Canonical
+prüfen. Der deaktivierte Checkout bleibt `noindex` und fehlt in der Sitemap.
+
 ### Rechtstexte und Datenschutzfreigabe
 
 Ausgearbeitete AGB und Datenschutztexte liegen in `src/lib/legal.ts`; Seiten und
@@ -159,13 +169,24 @@ und Backups sind beim Betreiber einzurichten; dieses Projekt ist kein Buchhaltun
 
 ## SEO: bestehende Position schützen
 
+- Der Startseitentitel bleibt `Streusalz Großhandel`, wie im bisherigen Suchergebnis.
+  Die neue Description beginnt mit dem belegten Thema „Streusalz für Wege, Einfahrten
+  und Straßen“ und nennt die aktuellen Gebinde und B2B-Bedingungen. Sie ist keine
+  behauptete identische Kopie der alten Description: Google-Snippets und Screenshots
+  der sichtbaren Seite belegen deren ursprüngliches HTML-Tag nicht.
+- Die frühere Themenüberschrift und Erklärung zur Auftauwirkung bleiben erhalten.
+  Veraltete Preise, 24-Tonnen-Mengen und „inklusive Lieferung“ werden nicht übernommen.
 - Bestehende Start-URL `/` bleibt erhalten. Deutscher serverseitig gerenderter Inhalt,
   ein H1, natürliche Keywordverwendung, Canonicals, OpenGraph, Organization-Daten und Sitemap.
 - Historische Spezifikation ist ausdrücklich als noch zu bestätigende Lieferantenangabe
   gekennzeichnet; keine erfundenen Gütesiegel oder Bewertungen.
 - Bekannte alte Bild-URLs und typische Startdokumente werden permanent weitergeleitet.
-- **Vorschau bleibt noindex** und robots-gesperrt. `isLiveReady()` schaltet die öffentliche
-  Indexierung erst mit der vollständigen Freischaltung ein; danach neu deployen.
+- **Vorschau bleibt noindex** und robots-gesperrt. `isSiteIndexable()` erlaubt nur die
+  kanonische HTTPS-WWW-Domain in Vercel Production. Die explizite SEO-Freigabe ist von
+  `isLiveReady()` getrennt; Änderungen der Einstellungen erfordern ein neues Deployment.
+- **Keine gesperrte Vorschau auf der bestehenden Produktionsdomain betreiben.**
+  Öffentliche Hostvarianten und die tatsächlich ausgelieferte `robots.txt` sowie
+  Robots-Metadaten separat prüfen; eine funktionierende lokale Fassung reicht nicht.
 - Vor DNS-Umstellung: vollständige Bestandsaufnahme aus Search Console und Serverdaten,
   bestehende indexierte URLs/Backlinks/Canonical-Host/Metadaten sichern und fehlende
   URLs gezielt weiterleiten. Nicht alle unbekannten URLs pauschal zur Startseite umleiten.
@@ -189,6 +210,9 @@ schematische Vorderansicht einer Palette mit versetzten Sacklagen dargestellt; h
 Säcke sind verdeckt. Die Beschriftung erklärt 40 Säcke à 25 kg, insgesamt 1.000 kg.
 Die Zeichnungen sind nicht maßstabsgetreu und enthalten keine unbestätigten Abmessungen.
 Das bereitgestellte SG-Logo mit gelber Schneeflocke wird in Kopf- und Fußzeile verwendet.
+Die kräftige, geneigte Wortmarke ergänzt die Domain `STREUSALZ-GROSSHANDEL.DE`.
+Der Header nennt die Gebindearten und bündelt Großhandel, Lieferung und Preise in der
+vorhandenen oberen Leiste; der Hero wiederholt diesen Slogan nicht.
 Die transparente PNG wurde ohne Farbänderungen zugeschnitten. Im dunklen Footer sorgt
 ein heller Hintergrund für Kontrast. Browser- und Apple-Icons werden aus demselben Logo
 abgeleitet; das ICO enthält Größen von 16, 32, 48 und 64 Pixeln.

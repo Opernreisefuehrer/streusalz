@@ -48,6 +48,12 @@ export function isLiveReady() {
     && process.env.MAIL_MODE !== "preview"
     && siteUrl().startsWith("https://");
 }
+export function isSiteIndexable() {
+  if (process.env.NODE_ENV !== "production" || process.env.VERCEL_ENV !== "production"
+    || !/^https:\/\/www\.streusalz-grosshandel\.de\/?$/.test(siteUrl())) return false;
+  const setting = process.env.SITE_INDEXING_ENABLED;
+  return setting === undefined ? isLiveReady() : setting === "true";
+}
 export function requireCheckout() {
   if (!isLiveReady()) throw new AppError("Der Online-Bestellabschluss ist noch nicht freigeschaltet. Bitte kontaktieren Sie uns telefonisch oder per E-Mail.", 503);
 }
