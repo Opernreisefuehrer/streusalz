@@ -1,0 +1,41 @@
+{
+  "name": "streusalz",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "db:migrate": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/migrate.ts",
+    "admin:password": "node scripts/password.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.14",
+    "@pdf-lib/fontkit": "^1.1.1",
+    "date-holidays": "^3.26.0",
+    "nodemailer": "^10.3.1",
+    "pdf-lib": "^1.17.1",
+    "pg": "^8.16.3",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7",
+    "next": "16.4.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/nodemailer": "^7.0.0",
+    "@types/pg": "^8.15.6",
+    "vitest": "^4.0.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.3",
+    "typescript": "^5"
+  }
+}

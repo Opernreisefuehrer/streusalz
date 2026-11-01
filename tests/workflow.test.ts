@@ -1,0 +1,120 @@
+import { beforeAll, afterAll, beforeEach, afterEach, describe, it, expect, vi } from "vitest";
+import { PGlite } from "@electric-sql/pglite";
+import { PDFDocument } from "pdf-lib";
+import { embeddedDatabase, type Database } from "../src/lib/db";
+import { schema } from "../src/lib/schema";
+import { createOrder, confirmSupplier, releaseInvoices, markDelivered, getOrder, type DocumentRow, type MailRow } from "../src/lib/orders";
+import { drainOutbox } from "../src/lib/mail";
+import { buildPdf } from "../src/lib/pdf";
+import { fixture } from "./fixtures";
+
+const sendMail = vi.hoisted(() => vi.fn());
+vi.mock("nodemailer", () => ({ default: { createTransport: () => ({ sendMail }) } }));
+let client: PGlite, db: Database;
+beforeAll(async () => { client = new PGlite(); await client.exec(schema); db = embeddedDatabase(client); });
+afterAll(async () => { await client.close(); });
+beforeEach(() => {
+  vi.stubEnv("SELLER_TAX_ID", "DE-TEST-CONFIGURATION");
+  vi.stubEnv("SELLER_IBAN", "TEST-IBAN-NOT-A-BANK-ACCOUNT");
+  vi.stubEnv("SMTP_HOST", "smtp.example.invalid"); vi.stubEnv("SMTP_USER", "test"); vi.stubEnv("SMTP_PASSWORD", "test");
+  vi.stubEnv("ADMIN_EMAIL", "admin@example.invalid");
+  vi.stubEnv("MAIL_MODE", "smtp"); sendMail.mockReset(); sendMail.mockResolvedValue({ accepted: ["test@example.invalid"], rejected: [] });
+});
+afterEach(() => { vi.unstubAllEnvs(); });
+describe("persistent PostgreSQL order lifecycle", () => {
+  it("runs order → thanks emails → supplier confirmation → three invoice PDFs → delivery notes and correct due dates", async () => {
+    const { order: input, quote } = fixture([10, 8, 5]);
+    const order = await createOrder(db, input, quote);
+    expect(order.status).toBe("ordered");
+    expect((await db.query("SELECT * FROM outbox WHERE order_id=$1", [order.id])).length).toBe(4);
+    await expect(releaseInvoices(db, order.id, "admin")).rejects.toThrow("Lieferantenbestätigung");
+    await expect(markDelivered(db, order.id, [quote.createdOn], "admin")).rejects.toThrow("Rechnungsfreigabe");
+    expect(await drainOutbox(db, 4, order.id)).toEqual({ sent: 4, failed: 0, pending: 0 });
+    expect(sendMail).toHaveBeenCalledTimes(4);
+    expect(sendMail.mock.calls[3][0].to).toBe("admin@example.invalid");
+    expect(sendMail.mock.calls[3][0].text).toContain(`/admin/bestellungen/${order.id}`);
+    expect(sendMail.mock.calls[0][0].text).toContain("14 Tage nach tatsächlicher Lieferung");
+    await confirmSupplier(db, order.id, "SUPPLIER-TEST-42", "admin");
+    expect((await getOrder(db, order.id)).status).toBe("supplier_confirmed");
+    await releaseInvoices(db, order.id, "admin");
+    await expect(releaseInvoices(db, order.id, "admin")).rejects.toThrow();
+    const invoices = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='invoice' ORDER BY participant_index", [order.id]);
+    expect(invoices).toHaveLength(3);
+    expect(new Set(invoices.map(invoice => invoice.number)).size).toBe(3);
+    expect(invoices.reduce((sum, invoice) => sum + invoice.snapshot.line.grossCents, 0)).toBe(quote.grossCents);
+    const buffer = await buildPdf(invoices[0]);
+    expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
+    expect((await PDFDocument.load(buffer)).getPageCount()).toBeGreaterThan(0);
+    expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
+    expect(sendMail.mock.calls.at(-1)![0].attachments[0].filename).toMatch(/^R-.*\.pdf$/);
+    await markDelivered(db, order.id, input.participants.map(() => quote.createdOn), "admin");
+    expect((await getOrder(db, order.id)).status).toBe("delivered");
+    expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
+    const notes = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='delivery'", [order.id]);
+    expect(notes).toHaveLength(3);
+    expect(notes[0].snapshot.invoiceNumber).toMatch(/^R-/);
+    await expect(markDelivered(db, order.id, [quote.createdOn], "admin")).rejects.toThrow();
+    const filtered = await db.query("SELECT * FROM orders WHERE ($1='' OR status=$1) AND ($2='' OR number ILIKE $3 OR (snapshot->'participants')::text ILIKE $3)", ["delivered", "Winterdienst", "%Winterdienst%"]);
+    expect(filtered.length).toBeGreaterThan(0);
+  });
+  it("deduplicates retried orders and refuses reuse with changed customer data", async () => {
+    const { order: input, quote } = fixture();
+    const one = await createOrder(db, input, quote);
+    const retry = await createOrder(db, input, quote);
+    expect(one.id).toBe(retry.id);
+    expect((await db.query("SELECT * FROM outbox WHERE order_id=$1", [one.id]))).toHaveLength(2);
+    await expect(createOrder(db, { ...input, participants: [{ ...input.participants[0], company: "Changed" }] }, quote)).rejects.toThrow("anderen Daten");
+  });
+  it("reports SMTP failure, persists retry state and sends the same message ID on retry", async () => {
+    const { order: input, quote } = fixture();
+    const order = await createOrder(db, input, quote);
+    // Finish pending mails from the preceding test before simulating a failure.
+    await drainOutbox(db, 6);
+    await db.query("UPDATE outbox SET status='pending',attempts=0 WHERE order_id=$1 AND recipient=$2", [order.id, input.participants[0].email]);
+    sendMail.mockRejectedValueOnce(new Error("Test SMTP unavailable"));
+    expect(await drainOutbox(db, 1, order.id)).toEqual({ sent: 0, failed: 1, pending: 1 });
+    const [failed] = await db.query<MailRow>("SELECT * FROM outbox WHERE order_id=$1 AND recipient=$2", [order.id, input.participants[0].email]);
+    expect(failed.status).toBe("failed"); expect(failed.last_error).toContain("SMTP");
+    const failedId = sendMail.mock.calls.at(-1)![0].messageId;
+    expect(await drainOutbox(db, 1, order.id)).toEqual({ sent: 1, failed: 0, pending: 0 });
+    expect(sendMail.mock.calls.at(-1)![0].messageId).toBe(failedId);
+    expect((await db.query<MailRow>("SELECT * FROM outbox WHERE id=$1", [failed.id]))[0].status).toBe("sent");
+  });
+  it("rejects missing seller data and impossible delivery dates without changing order status", async () => {
+    const { order: input, quote } = fixture();
+    const order = await createOrder(db, input, quote);
+    await confirmSupplier(db, order.id, "confirmed", "admin");
+    vi.stubEnv("SELLER_TAX_ID", "");
+    await expect(releaseInvoices(db, order.id, "admin")).rejects.toThrow("Steuerangabe");
+    expect((await getOrder(db, order.id)).status).toBe("supplier_confirmed");
+    vi.stubEnv("SELLER_TAX_ID", "TEST");
+    await releaseInvoices(db, order.id, "admin");
+    for (const dates of [[], ["2099-01-01"], ["2026-02-30"], ["2000-01-01"]]) await expect(markDelivered(db, order.id, dates, "admin")).rejects.toThrow("Lieferdatum");
+    expect((await getOrder(db, order.id)).status).toBe("invoiced");
+  });
+  it("keeps receipt, invoice and delivery email in order and reports pending mail after retry exhaustion", async () => {
+    const { order: input, quote } = fixture();
+    const order = await createOrder(db, input, quote);
+    await drainOutbox(db, 6, order.id);
+    await confirmSupplier(db, order.id, "test", "admin");
+    await releaseInvoices(db, order.id, "admin");
+    await markDelivered(db, order.id, [quote.createdOn], "admin");
+    await db.query("UPDATE outbox SET status='failed',attempts=5 WHERE order_id=$1 AND document_id IS NULL AND recipient=$2", [order.id, input.participants[0].email]);
+    expect(await drainOutbox(db, 6, order.id)).toEqual({ sent: 0, failed: 0, pending: 3 });
+    await db.query("UPDATE outbox SET status='pending',attempts=0 WHERE order_id=$1 AND document_id IS NULL AND recipient=$2", [order.id, input.participants[0].email]);
+    const start = sendMail.mock.calls.length;
+    expect(await drainOutbox(db, 6, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
+    expect(sendMail.mock.calls.slice(start).map(call => call[0].subject)).toEqual([
+      expect.stringContaining("Vielen Dank"), expect.stringContaining("Rechnung"), expect.stringContaining("Lieferschein"),
+    ]);
+  });
+  it("supports extended Latin and Cyrillic names in real PDF documents", async () => {
+    const { order: input, quote } = fixture();
+    input.participants[0].contact = "Łukasz Иванов";
+    const order = await createOrder(db, input, quote);
+    await confirmSupplier(db, order.id, "unicode-test", "admin");
+    await releaseInvoices(db, order.id, "admin");
+    const [invoice] = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1", [order.id]);
+    expect((await PDFDocument.load(await buildPdf(invoice))).getPageCount()).toBeGreaterThan(0);
+  });
+});
