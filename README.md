@@ -188,8 +188,10 @@ Die BigBag-Zeichnung kennzeichnet das Füllgewicht von 1.000 kg. Die Sackware wi
 schematische Vorderansicht einer Palette mit versetzten Sacklagen dargestellt; hintere
 Säcke sind verdeckt. Die Beschriftung erklärt 40 Säcke à 25 kg, insgesamt 1.000 kg.
 Die Zeichnungen sind nicht maßstabsgetreu und enthalten keine unbestätigten Abmessungen.
-Die dreieckige Schneeflocke wird in Kopf-/Fußzeile
-und als Website-Icon verwendet.
+Das bereitgestellte SG-Logo mit gelber Schneeflocke wird in Kopf- und Fußzeile verwendet.
+Die transparente PNG wurde ohne Farbänderungen zugeschnitten. Im dunklen Footer sorgt
+ein heller Hintergrund für Kontrast. Browser- und Apple-Icons werden aus demselben Logo
+abgeleitet; das ICO enthält Größen von 16, 32, 48 und 64 Pixeln.
 Es werden keine fremden Produktfotos oder Bewertungen verwendet. Eine pauschale Garantie
 der rechtlichen Schutzfreiheit KI-generierter Inhalte ist nicht möglich.
 Noto Sans für die PDFs ist unter SIL Open Font License lizenziert; die Lizenz liegt unter

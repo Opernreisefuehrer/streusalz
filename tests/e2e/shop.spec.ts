@@ -31,9 +31,31 @@ test("admin is protected and preview is not indexable", async ({ page, request }
   const document = await request.get("/api/admin/documents/00000000-0000-4000-8000-000000000000");
   expect(document.status()).toBe(401);
 });
-test("snowflake and labelled technical package drawings appear consistently", async ({ page }) => {
+test("provided brand logo, favicons and technical package drawings appear consistently", async ({ page, request }) => {
   await page.goto("/");
-  await expect(page.locator('img.brand-icon[src="/snowflake.svg"]')).toHaveCount(2);
+  const logos = page.locator('img.brand-icon[src="/images/streusalz-logo.png"]');
+  await expect(logos).toHaveCount(2);
+  await logos.last().scrollIntoViewIfNeeded();
+  await expect.poll(() => logos.evaluateAll(images => images.every(image =>
+    image instanceof HTMLImageElement && image.complete && image.naturalWidth === 704 && image.naturalHeight === 359,
+  ))).toBe(true);
+  await expect(page.locator('img[src="/snowflake.svg"]')).toHaveCount(0);
+  const icon = page.locator('link[rel="icon"][href*="/icon.png"]');
+  await expect(icon).toHaveCount(1);
+  await expect(icon).toHaveAttribute("sizes", "512x512");
+  const iconUrl = await icon.getAttribute("href");
+  if (!iconUrl) throw new Error("The generated brand icon is missing its URL.");
+  const iconResponse = await request.get(iconUrl);
+  expect(iconResponse.status()).toBe(200);
+  expect(iconResponse.headers()["content-type"]).toContain("image/png");
+  await expect(page.locator('link[rel="apple-touch-icon"][href*="/apple-icon.png"]')).toHaveAttribute("sizes", "180x180");
+  await expect(page.locator('link[rel="icon"][href*="/icon.svg"]')).toHaveCount(0);
+  const favicon = await request.get("/favicon.ico");
+  expect(favicon.status()).toBe(200);
+  const faviconBytes = await favicon.body();
+  expect(faviconBytes.readUInt16LE(2)).toBe(1);
+  expect(faviconBytes.readUInt16LE(4)).toBe(4);
+  expect([0, 1, 2, 3].map(index => faviconBytes[6 + index * 16])).toEqual([16, 32, 48, 64]);
   const bigbag = page.getByRole("img", { name: /Technische Illustration: BigBag mit 1.000 kg/ });
   await expect(bigbag).toBeVisible();
   await expect(bigbag).toContainText("1 BigBag = 1 Tonne");
