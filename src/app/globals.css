@@ -4,7 +4,7 @@
 .product-visual .visual-caption{position:static;align-self:stretch;padding:0 12px;text-align:center;font-size:11px;line-height:1.3;color:var(--muted)}
 .brand .brand-icon{width:80px;height:auto}
 .brand-copy{min-width:0}
-.brand-domain{display:block;max-width:13em;font-family:"Arial Black",Arial,sans-serif;font-size:18px;font-style:italic;font-weight:900;line-height:1.05;letter-spacing:-.035em;color:#063363}
+.brand-domain{display:block;max-width:13em;font-family:"Arial Black",Arial,sans-serif;font-size:18px;font-style:normal;font-weight:900;line-height:1.05;letter-spacing:-.035em;color:#063363}
 .brand-tagline{display:block;margin-top:5px;font-size:11px;font-weight:600;line-height:1.3;letter-spacing:.1px;color:var(--muted)}
 .site-footer .brand-domain{color:var(--white)}
 .topbar .container{align-items:center;gap:10px}

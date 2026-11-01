@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "db:migrate": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/migrate.ts",
+    "db:migrate:production": "node --env-file-if-exists=.env.production.local --experimental-strip-types scripts/migrate.ts",
     "admin:password": "node scripts/password.mjs"
   },
   "dependencies": {

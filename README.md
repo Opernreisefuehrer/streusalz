@@ -25,7 +25,25 @@ Umgebungsdateien, Datenbank und Mailvorschauen werden nicht in Git aufgenommen.
 ### Adminzugang
 
 `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` und `SESSION_SECRET` konfigurieren.
-Einen Passwort-Hash erzeugt `npm run admin:password -- "Ihr-langes-eigenes-Passwort"`.
+Ein Passwort wird über die Standardeingabe an `npm run admin:password -- --stdin`
+übergeben, nicht als sichtbares Befehlsargument. Unter Windows PowerShell:
+
+```powershell
+$password = Read-Host "Neues Adminpasswort (mindestens 14 Zeichen)" -AsSecureString
+$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+$previousEncoding = $OutputEncoding
+try {
+  $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+  [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) | node scripts\password.mjs --stdin
+} finally {
+  $OutputEncoding = $previousEncoding
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+  $password.Dispose()
+}
+```
+
+Nur den erzeugten Hash als `ADMIN_PASSWORD_HASH` in Vercel hinterlegen; weder Passwort
+noch Hash im Chat posten.
 Verwenden Sie mindestens 14 Zeichen für das Passwort und mindestens 32 zufällige Zeichen
 für `SESSION_SECRET`. Es gibt kein Standardpasswort und keine öffentliche Demo-Hintertür.
 Der Adminzugang verwendet ein HttpOnly-/SameSite-Cookie, acht Stunden Sitzungsdauer,
@@ -125,6 +143,57 @@ Ohne explizite SEO-Einstellung bleibt die bisherige vollständige Shopfreigabe V
 Nach dem Deployment auf der echten Domain Robots-Metadaten, `robots.txt` und Canonical
 prüfen. Der deaktivierte Checkout bleibt `noindex` und fehlt in der Sitemap.
 
+### Produktionsprofil: Artfiles und Neon
+
+`.env.production.example` enthält die vorbereiteten Production-Einstellungen.
+In **Vercel > Project > Settings > Environment Variables** übernehmen, echte Geheimnisse
+nur dort eintragen und nur Production auswählen. Die Datei enthält keine echten
+Passwörter, Schlüssel, Bankdaten oder Datenbank-Verbindungsstrings.
+
+- **Artfiles:** `smtp.artfiles.de`, Port `587`, STARTTLS. `SMTP_USER` ist die vollständige
+  Adresse des Versandpostfachs, `SMTP_PASSWORD` dessen Postfachpasswort, nicht das
+  DCP-Passwort. Falls `info@streusalz-grosshandel.de` nur eine Weiterleitung ist, ein
+  echtes Versandpostfach verwenden und die zulässige Absenderadresse prüfen.
+  `datenschutz@streusalz-grosshandel.de` als erreichbares Postfach/Weiterleitung anlegen.
+  SPF/DKIM und DMARC für den Versand mit Artfiles prüfen.
+- **Neon:** Im Projekt unter **Connect** die gepoolte URL mit `-pooler` für `DATABASE_URL`
+  und die direkte URL für `DIRECT_DATABASE_URL` kopieren, inklusive TLS-Parameter.
+  Die direkte Verbindung wird für Schema-Migrationen bevorzugt; ohne sie bleibt
+  `DATABASE_URL` aus Kompatibilitätsgründen der bisherige Migrationsweg.
+  Die tatsächliche Region bestätigen; Frankfurt ist `aws-eu-central-1`, kein automatischer
+  Standard. Die Region eines bestehenden Projekts lässt sich nicht einfach umstellen.
+  EU-Datenbankstandort bedeutet nicht automatisch ausschließlich EU-Verarbeitung.
+- **Admin/Sicherheit:** Hash wie oben erzeugen. Für `SESSION_SECRET` und `CRON_SECRET`
+  unabhängig jeweils `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"`
+  lokal ausführen und das Ergebnis direkt in Vercel eintragen.
+- **Routing:** Eigenen OpenRouteService-Schlüssel als `ORS_API_KEY` hinterlegen und
+  Geocoding sowie `driving-hgv` praktisch testen. Lagerkoordinaten beim Lieferanten
+  bestätigen; eine Stadtmitte ist keine bestätigte Lagerzufahrt.
+- **Rechnungen:** Echte Steuer-/Umsatzsteuerkennung sowie Bankname, IBAN und gegebenenfalls
+  BIC eintragen. Die private Steuernummer bleibt ausschließlich in Rechnungen.
+- **Rechtliches:** Tatsächliche Verarbeitungsorte, Vercel-Protokollfrist und geprüfte
+  AV-/Drittlandvereinbarungen ergänzen. Die Provider-Namen fließen über diese Variablen
+  in die vorhandenen Datenschutztexte ein. `TERMS_TEXT` und `PRIVACY_TEXT` dürfen leer
+  bleiben: dann gelten die eingebauten Texte, nicht fehlende AGB/Datenschutzseiten.
+
+Falls die Vercel CLI bereits eingerichtet ist, Production-Variablen für eine lokale
+Migration in die git-ignorierte `.env.production.local` übernehmen:
+
+```powershell
+vercel env pull .env.production.local --environment=production
+npm run db:migrate:production
+```
+
+Danach neu deployen und Adminanmeldung, Danke-Mail, manuelle Rechnungsfreigabe,
+PDF-Bankdaten und Lieferschein tatsächlich testen. `SHOP_ENABLED=false` und
+`LEGAL_READY=false` bleiben bis zu den erforderlichen Prüfungen unverändert.
+Es wurden keine Mailboxen, Neon-Projekte oder Bankverbindungen automatisch angelegt.
+
+Offizielle Quellen: [Artfiles SMTP-Einrichtung](https://www.artfiles.de/support/E-Mail-Einrichtung:_Alle_Clients_im_%C3%9Cberblick),
+[Neon Pooling](https://neon.com/docs/connect/connection-pooling),
+[Neon Regionen](https://neon.com/docs/introduction/regions),
+[Neon Vertrags-/Datenschutzbedingungen](https://neon.com/platform-terms#3.4).
+
 ### Rechtstexte und Datenschutzfreigabe
 
 Ausgearbeitete AGB und Datenschutztexte liegen in `src/lib/legal.ts`; Seiten und
@@ -178,8 +247,8 @@ und Backups sind beim Betreiber einzurichten; dieses Projekt ist kein Buchhaltun
   Veraltete Preise, 24-Tonnen-Mengen und „inklusive Lieferung“ werden nicht übernommen.
 - Bestehende Start-URL `/` bleibt erhalten. Deutscher serverseitig gerenderter Inhalt,
   ein H1, natürliche Keywordverwendung, Canonicals, OpenGraph, Organization-Daten und Sitemap.
-- Historische Spezifikation ist ausdrücklich als noch zu bestätigende Lieferantenangabe
-  gekennzeichnet; keine erfundenen Gütesiegel oder Bewertungen.
+- Mindestens 96 % NaCl und 0,1–5 mm Körnung sind als aktuelle Lieferantenangaben bestätigt.
+  Daraus wird keine unbestätigte TL-Streu-Konformität, kein Gütesiegel und keine Bewertung abgeleitet.
 - Bekannte alte Bild-URLs und typische Startdokumente werden permanent weitergeleitet.
 - **Vorschau bleibt noindex** und robots-gesperrt. `isSiteIndexable()` erlaubt nur die
   kanonische HTTPS-WWW-Domain in Vercel Production. Die explizite SEO-Freigabe ist von
@@ -210,7 +279,7 @@ schematische Vorderansicht einer Palette mit versetzten Sacklagen dargestellt; h
 Säcke sind verdeckt. Die Beschriftung erklärt 40 Säcke à 25 kg, insgesamt 1.000 kg.
 Die Zeichnungen sind nicht maßstabsgetreu und enthalten keine unbestätigten Abmessungen.
 Das bereitgestellte SG-Logo mit gelber Schneeflocke wird in Kopf- und Fußzeile verwendet.
-Die kräftige, geneigte Wortmarke ergänzt die Domain `STREUSALZ-GROSSHANDEL.DE`.
+Die kräftige, nicht kursive Wortmarke ergänzt die Domain `STREUSALZ-GROSSHANDEL.DE`.
 Der Header nennt die Gebindearten und bündelt Großhandel, Lieferung und Preise in der
 vorhandenen oberen Leiste; der Hero wiederholt diesen Slogan nicht.
 Die transparente PNG wurde ohne Farbänderungen zugeschnitten. Im dunklen Footer sorgt

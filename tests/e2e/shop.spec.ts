@@ -13,6 +13,9 @@ test("homepage preserves the legacy search title, topic and canonical identity",
   expect(new URL(canonicalUrl).pathname).toBe("/");
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: /Streusalz für Wege,\s*Einfahrten und Straßen\./ })).toBeVisible();
+  await expect(page.locator(".spec-card")).toContainText("Lieferantenspezifikation");
+  await expect(page.locator(".spec-card")).toContainText("mind. 96 % NaCl · 0,1–5 mm");
+  await expect(page.locator(".spec-card")).not.toContainText("Historische Spezifikation");
   const response = await request.get("/");
   expect(await response.text()).toContain("<title>Streusalz Großhandel</title>");
   const legacy = await request.get("/index.html", { maxRedirects: 0 });
@@ -23,6 +26,8 @@ test("wholesale header uses the brand domain without duplicate slogans or overla
   await page.goto("/");
   await expect(page.locator(".site-header .brand-domain")).toHaveText("STREUSALZ-GROSSHANDEL.DE");
   await expect(page.locator(".site-footer .brand-domain")).toHaveText("STREUSALZ-GROSSHANDEL.DE");
+  await expect(page.locator(".site-header .brand-domain")).toHaveCSS("font-style", "normal");
+  await expect(page.locator(".site-footer .brand-domain")).toHaveCSS("font-style", "normal");
   await expect(page.locator(".site-header .brand-tagline")).toHaveText("25-kg-Säcke · BigBags");
   await expect(page.locator(".topbar")).toContainText("Direkt vom Großhändler · Bundesweite Lieferung · Faire Preise");
   await expect(page.locator(".hero .eyebrow")).not.toContainText(/direkt vom großhändler/i);
