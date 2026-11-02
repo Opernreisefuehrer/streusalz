@@ -8,7 +8,7 @@ export default function Imprint() {
   return <main id="main" className="container legal-content">
     <p className="eyebrow">ANGABEN NACH § 5 DDG</p><h1>Impressum</h1>
     <h2>Streusalz Großhandel</h2><p>Inhaber: {company.name}<br />Einzelunternehmer<br />{company.street}<br />{company.postcode} {company.city}<br />Deutschland</p>
-    <h2>Kontakt</h2><p>Telefon: <a href={`tel:+49${company.phone.replace(/^0/, "").replace(/\D/g, "")}`}>{company.phone}</a><br />E-Mail: <a href={`mailto:${company.email}`}>{company.email}</a></p>
+    <h2>Kontakt</h2><p>E-Mail: <a href={`mailto:${company.email}`}>{company.email}</a></p>
     <h2>Register</h2><p>Der Anbieter ist nicht im Handelsregister eingetragen.</p>
     {company.vatId && <><h2>Umsatzsteuer-Identifikationsnummer</h2><p>USt-IdNr. nach § 27a UStG: {company.vatId}</p></>}
     {company.economicId && <><h2>Wirtschafts-Identifikationsnummer</h2><p>W-IdNr. nach § 139c AO: {company.economicId}</p></>}

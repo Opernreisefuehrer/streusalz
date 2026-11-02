@@ -68,8 +68,13 @@ test("single company is the default and community ordering is an optional specia
   await expect(page.locator(".site-footer")).toContainText("Nur für Gewerbetreibende und öffentliche Auftraggeber, z. B. Städte und Gemeinden. Kein Verkauf an Privatkunden.");
   await expect(page.locator(".participant-block")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Rechnungsempfänger & Lieferung" })).toBeVisible();
-  await expect(page.getByLabel("Menge in vollen Tonnen")).toHaveValue("23");
-  await expect(page.getByLabel("Menge in vollen Tonnen")).toHaveAttribute("step", "23");
+  await expect(page.getByLabel("BigBags: Anzahl der 23-t-Ladungen")).toHaveValue("1");
+  await expect(page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen")).toHaveValue("0");
+  await expect(page.getByLabel("BigBags: Anzahl der 23-t-Ladungen")).toHaveAttribute("step", "1");
+  await expect(page.getByRole("textbox", { name: "E-Mail-Adresse", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Telefon für die Lieferabstimmung", exact: true })).toBeVisible();
+  await expect(page.locator("form")).toContainText("verbindliches Kaufangebot");
+  await expect(page.locator("form")).toContainText("kein gesetzliches Widerrufsrecht");
   const business = page.getByRole("checkbox", { name: /Ich bestelle für ein Unternehmen oder einen öffentlichen Auftraggeber/ });
   await expect(business).not.toHaveAccessibleName(/Teilnehmer/);
   await page.getByLabel("Name des Unternehmens / der Einrichtung").fill("Gemeinde Musterhausen");
@@ -95,7 +100,7 @@ test("single company is the default and community ordering is an optional specia
   await page.getByRole("button", { name: "Entfernen", exact: true }).last().click();
   await page.getByRole("button", { name: "Entfernen", exact: true }).last().click();
   await expect(page.locator(".participant-block")).toHaveCount(1);
-  await expect(page.getByLabel("Menge in vollen Tonnen")).toHaveValue("23");
+  await expect(page.getByLabel("BigBags: Anzahl der 23-t-Ladungen")).toHaveValue("1");
   await expect(page.getByRole("heading", { name: "Rechnungsempfänger & Lieferung" })).toBeVisible();
   await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Auftraggebern", { exact: true }).click();
   await add.click();
@@ -203,22 +208,23 @@ test("postcode all-in prices are invalidated and fetched again when quantity, pr
   const tonnePrice = summary.locator(".summary-row").filter({ hasText: "Pro Tonne netto inkl. Lieferung" });
   await expect(summary).toContainText("8.635,00");
   await expect(tonnePrice).toContainText("375,43");
-  await page.getByLabel("Menge in vollen Tonnen").fill("46");
+  await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("2");
   await expect(summary).toContainText("17.270,00");
   await expect(tonnePrice).toContainText("375,43");
   expect(requests).toHaveLength(2);
   expect(requests[1]).toEqual({ product: "bigbag", postcode: "55118", tonnes: 46 });
-  await page.getByRole("radio", { name: /25-kg-Sackware/ }).check();
+  await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("0");
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("2");
   await expect(summary).toContainText("17.730,00");
   await expect(tonnePrice).toContainText("385,43");
   await expect(summary.locator(".summary-row").filter({ hasText: "Pro 25-kg-Sack netto inkl. Lieferung" })).toContainText("9,64");
   await postcode.fill("10115");
   await expect.poll(() => requests.length).toBe(4);
   expect(requests[3]).toEqual({ product: "bags", postcode: "10115", tonnes: 46 });
-  await page.getByLabel("Menge in vollen Tonnen").clear();
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").clear();
   await expect(tonnePrice).toContainText("PLZ eingeben");
   await expect(summary).not.toHaveClass(/message-success/);
-  await page.getByRole("radio", { name: /BigBags/ }).check();
+  await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("1");
   await expect(tonnePrice).toBeVisible();
   await expect(summary.getByText("Pro 25-kg-Sack netto inkl. Lieferung", { exact: true })).toHaveCount(0);
 });
@@ -276,9 +282,12 @@ test("one order supports differently loaded trucks, correct product unit prices 
     await route.fulfill({ json: { quote: { ...totals, lines: [{ tonnes: input.deliveries[0].tonnes, grossCents: totals.grossCents, deliveryDate: "2026-11-09", resolvedAddress: "Teststraße 1, 65719 Hofheim" }] }, token: "test-mixed-final-quote-token" } });
   });
   await page.goto("/bestellen");
-  await page.getByRole("radio", { name: /Mehrere Gebindearten/ }).check();
-  await expect(page.getByLabel("BigBags: Menge in Tonnen")).toHaveValue("23");
-  await expect(page.getByLabel("25-kg-Sackware: Menge in Tonnen")).toHaveValue("23");
+  await expect(page.locator(".product-option")).toHaveCount(2);
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(page.getByText("Mehrere Gebindearten", { exact: true })).toHaveCount(0);
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("1");
+  await expect(page.getByLabel("BigBags: Anzahl der 23-t-Ladungen")).toHaveValue("1");
+  await expect(page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen")).toHaveValue("1");
   await expect(page.locator("form")).toContainText("Beispiel: 23 t BigBags + 23 t 25-kg-Sackware");
   await expect(page.locator(".participant-block")).toHaveCount(1);
   await page.getByLabel("Liefer-PLZ", { exact: true }).fill("65719");
@@ -293,18 +302,26 @@ test("one order supports differently loaded trucks, correct product unit prices 
   await page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ }).click();
   await expect(summary).toContainText("Teststraße 1, 65719 Hofheim");
   expect(finalRequest).toMatchObject({ items: [{ product: "bigbag", tonnes: 23 }, { product: "bags", tonnes: 23 }], deliveries: [{ tonnes: 46 }], postcodePriceToken: "test-mixed-postcode-price-token" });
-  await page.getByLabel("25-kg-Sackware: Menge in Tonnen").fill("46");
+  await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("2");
+  await expect(summary).toContainText("26.135,00");
+  expect(requests.at(-1)).toMatchObject({ tonnes: 69, items: [{ product: "bigbag", tonnes: 46 }, { product: "bags", tonnes: 23 }] });
+  await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("1");
+  await expect(summary).toContainText("17.500,00");
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("2");
   await expect(summary).toContainText("26.365,00");
   await expect(summary).not.toContainText("Teststraße 1, 65719 Hofheim");
-  await page.getByLabel("25-kg-Sackware: Menge in Tonnen").fill("24");
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("1.5");
   await expect(page.locator('.message-error[role="alert"]')).toContainText("Je Gebindeart sind volle 23-Tonnen-Ladungen erforderlich");
   await expect(summary).not.toHaveClass(/price-success/);
-  await page.getByLabel("25-kg-Sackware: Menge in Tonnen").fill("23");
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("-1");
+  await expect(summary).not.toHaveClass(/price-success/);
+  await expect(page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ })).toBeDisabled();
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("1");
   await expect(summary).toContainText("17.500,00");
   await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Auftraggebern", { exact: true }).click();
   await expect(page.getByRole("button", { name: "+ Weiteren Auftraggeber hinzufügen", exact: true })).toBeDisabled();
-  await page.getByRole("radio", { name: /BigBags/ }).check();
-  await expect(summary).toContainText("17.270,00");
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("0");
+  await expect(summary).toContainText("8.635,00");
   await expect(summary.getByText("Pro 25-kg-Sack netto inkl. Lieferung", { exact: true })).toHaveCount(0);
   expect(requests.at(-1)).not.toHaveProperty("items");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -322,14 +339,15 @@ test("postcode price errors are visible next to the postcode form", async ({ pag
 });
 test("quantity rules, product separation and clear missing routing configuration", async ({ page }) => {
   await page.goto("/bestellen?produkt=bags");
-  await expect(page.getByRole("radio", { name: /25-kg-Sackware/ })).toBeChecked();
+  await expect(page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen")).toHaveValue("1");
+  await expect(page.getByLabel("BigBags: Anzahl der 23-t-Ladungen")).toHaveValue("0");
   const summary = page.getByRole("complementary", { name: "Preisübersicht" });
   await expect(summary.locator(".summary-row").filter({ hasText: "Pro Tonne netto inkl. Lieferung" })).toContainText("PLZ eingeben");
   await expect(summary.locator(".summary-row").filter({ hasText: "Pro 25-kg-Sack netto inkl. Lieferung" })).toContainText("PLZ eingeben");
-  await page.getByLabel("Menge in vollen Tonnen").fill("22");
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("0.5");
   await expect(page.locator('.message-error[role="alert"]')).toContainText("23, 46, 69");
   await expect(page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ })).toBeDisabled();
-  await page.getByLabel("Menge in vollen Tonnen").fill("23");
+  await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("1");
   await page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ }).click();
   await expect(page.locator('.message-error[role="alert"]')).toContainText("ausfüllen");
 });
@@ -364,6 +382,25 @@ test("provided brand logo, favicons and technical package drawings appear consis
   expect(iconResponse.status()).toBe(200);
   expect(iconResponse.headers()["content-type"]).toContain("image/png");
   await expect(page.locator('link[rel="apple-touch-icon"][href*="/apple-icon.png"]')).toHaveAttribute("sizes", "180x180");
+  const iconPixels = await page.evaluate(async urls => Promise.all(urls.map(async url => {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Cannot inspect the favicon pixels.");
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let gold = 0, navy = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] < 20) continue;
+      if (pixels[i] > pixels[i + 1] && pixels[i + 1] > pixels[i + 2]) gold++;
+      if (pixels[i + 2] > pixels[i] + 20) navy++;
+    }
+    return { gold, navy };
+  })), [iconUrl, "/apple-icon.png"]);
+  expect(iconPixels.every(icon => icon.gold > 100 && icon.navy === 0)).toBe(true);
   await expect(page.locator('link[rel="icon"][href*="/icon.svg"]')).toHaveCount(0);
   const favicon = await request.get("/favicon.ico");
   expect(favicon.status()).toBe(200);
@@ -399,6 +436,17 @@ test("provided brand logo, favicons and technical package drawings appear consis
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect(page.locator(".hero-image")).toHaveAttribute("alt", /volle 1-Tonnen-Palette mit 40 Säcken/);
   await expect(page.locator(".hero-image")).toHaveAttribute("alt", /feinkörnigem Streusalz/);
+});
+test("public seller contact is email-only on the homepage and legal pages", async ({ page }) => {
+  for (const path of ["/", "/impressum", "/agb", "/datenschutz"]) {
+    await page.goto(path);
+    await expect(page.locator('a[href^="tel:"]')).toHaveCount(0);
+    await expect(page.locator("body")).not.toContainText("01523-6183155");
+    await expect(page.locator('a[href="mailto:info@streusalz-grosshandel.de"]').first()).toBeVisible();
+    if (path === "/") {
+      expect(await page.locator('script[type="application/ld+json"]').allTextContents()).not.toContainEqual(expect.stringContaining('"telephone"'));
+    }
+  }
 });
 test("legal pages explain necessary storage and show the correct privacy contact", async ({ page }) => {
   await page.goto("/datenschutz");

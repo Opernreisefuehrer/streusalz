@@ -22,6 +22,8 @@ describe("consistent legal content and accurate technical notices", () => {
     expect(text).toContain("keine zusätzlichen Lieferkosten");
     expect(text).toContain("öffentliche Auftraggeber, insbesondere Städte, Gemeinden und kommunale Einrichtungen");
     expect(text).toContain("Kein Verkauf an Privatkunden");
+    expect(text).toContain("verbindliches Angebot");
+    expect(text).toContain("Ein gesetzliches Verbraucherwiderrufsrecht besteht für diesen Kundenkreis nicht.");
     expect(text).toContain("Bis zu drei Unternehmen oder öffentliche Auftraggeber");
     expect(text).toContain("öffentliche Auftraggeber ohne Kaufmannseigenschaft");
     expect(text).toContain("Je Lkw-Ladung (23 t) wird eine Gebindeart gewählt");
@@ -73,6 +75,16 @@ describe("consistent legal content and accurate technical notices", () => {
     expect(html).toContain("DE123456789");
     expect(html).toContain("DE987654321-00001");
     expect(html).not.toContain("PRIVATE-TAX-NUMBER-TEST");
+  });
+  it("publishes only email contact details even if an old seller phone setting remains", () => {
+    vi.stubEnv("SELLER_PHONE", "PHONE-NOT-FOR-PUBLICATION");
+    expect(seller()).not.toHaveProperty("phone");
+    for (const text of [documentText(termsDocument()), documentText(privacyDocument()), renderToStaticMarkup(Imprint())]) {
+      expect(text).not.toContain("PHONE-NOT-FOR-PUBLICATION");
+      expect(text).not.toContain("01523-6183155");
+      expect(text).not.toContain("tel:");
+      expect(text).toContain("info@streusalz-grosshandel.de");
+    }
   });
   it("keeps checkout locked until real provider and transfer details are recorded", () => {
     for (const field of ["PRIVACY_DATABASE_PROVIDER", "PRIVACY_DATABASE_COUNTRY", "PRIVACY_MAIL_PROVIDER", "PRIVACY_MAIL_COUNTRY", "PRIVACY_HOSTING_LOG_RETENTION_DAYS", "PRIVACY_TRANSFER_DETAILS"]) vi.stubEnv(field, "");

@@ -26,7 +26,7 @@ export function termsDocument(): LegalDocument {
     date: date(),
     sections: [
       section("geltung", "1. Anbieter und Geltungsbereich",
-        `Diese Allgemeinen Geschäftsbedingungen gelten für Bestellungen bei Streusalz Großhandel, Inhaber ${company.name}, ${company.street}, ${company.postcode} ${company.city}, Deutschland. Kontakt: ${company.email}, Telefon ${company.phone}.`,
+        `Diese Allgemeinen Geschäftsbedingungen gelten für Bestellungen bei Streusalz Großhandel, Inhaber ${company.name}, ${company.street}, ${company.postcode} ${company.city}, Deutschland. Kontakt: ${company.email}.`,
         "Unser Angebot richtet sich ausschließlich an Unternehmer im Sinne des § 14 BGB, die bei der Bestellung in Ausübung ihrer gewerblichen oder selbstständigen beruflichen Tätigkeit handeln, sowie an öffentliche Auftraggeber, insbesondere Städte, Gemeinden und kommunale Einrichtungen. Kein Verkauf an Privatkunden. Bestellungen von Verbrauchern nehmen wir nicht an. Ein gesetzliches Verbraucherwiderrufsrecht besteht für diesen Kundenkreis nicht.",
         "Abweichende Geschäftsbedingungen des Kunden gelten nur, wenn wir ihrer Geltung ausdrücklich zugestimmt haben. Individuelle Vereinbarungen haben Vorrang."),
       section("produkte", "2. Produkte, Gebinde und Beschaffenheit",
@@ -90,7 +90,7 @@ export function privacyDocument(): LegalDocument {
     date: date(),
     sections: [
       section("verantwortlicher", "1. Verantwortlicher und Datenschutzkontakt",
-        `Verantwortlich für die Verarbeitung personenbezogener Daten ist ${company.name}, Einzelunternehmer und Inhaber von Streusalz Großhandel, ${company.street}, ${company.postcode} ${company.city}, Deutschland. Allgemeiner Kontakt: ${company.email}, Telefon ${company.phone}.`,
+        `Verantwortlich für die Verarbeitung personenbezogener Daten ist ${company.name}, Einzelunternehmer und Inhaber von Streusalz Großhandel, ${company.street}, ${company.postcode} ${company.city}, Deutschland. Allgemeiner Kontakt: ${company.email}.`,
         `Datenschutzanfragen richten Sie bitte an ${privacy.contactEmail}. Diese Adresse ist ein Kontakt für Datenschutzanliegen; sie bezeichnet nicht automatisch einen förmlich bestellten Datenschutzbeauftragten.`),
       section("daten", "2. Datenarten und Herkunft",
         "Beim Besuch können technische Zugriffsdaten wie IP-Adresse, Zeitpunkt, angeforderte Seite, Browser-/Geräteinformationen und technische Fehler anfallen. Für eine Frachtanfrage verarbeiten wir Gebindeart, Mengen sowie Straße, Hausnummer, Postleitzahl und Ort der Lieferadressen.",

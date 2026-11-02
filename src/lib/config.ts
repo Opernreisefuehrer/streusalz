@@ -10,7 +10,6 @@ export function seller() {
     street: process.env.SELLER_STREET || "Nahestr. 5",
     postcode: process.env.SELLER_POSTCODE || "55118",
     city: process.env.SELLER_CITY || "Mainz",
-    phone: process.env.SELLER_PHONE || "01523-6183155",
     email: process.env.SELLER_EMAIL || "info@streusalz-grosshandel.de",
     vatId: process.env.SELLER_VAT_ID || "",
     economicId: process.env.SELLER_WID || "",
@@ -55,7 +54,7 @@ export function isSiteIndexable() {
   return setting === undefined ? isLiveReady() : setting === "true";
 }
 export function requireCheckout() {
-  if (!isLiveReady()) throw new AppError("Der Online-Bestellabschluss ist noch nicht freigeschaltet. Bitte kontaktieren Sie uns telefonisch oder per E-Mail.", 503);
+  if (!isLiveReady()) throw new AppError("Der Online-Bestellabschluss ist noch nicht freigeschaltet. Bitte kontaktieren Sie uns per E-Mail.", 503);
 }
 export function signingSecret() {
   const value = process.env.SESSION_SECRET;

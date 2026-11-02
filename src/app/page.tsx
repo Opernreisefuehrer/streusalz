@@ -18,7 +18,7 @@ export default function Home() {
   const company = seller();
   const structuredData = {
     "@context": "https://schema.org", "@type": "Organization", name: "Streusalz Großhandel",
-    url: siteUrl(), email: company.email, telephone: company.phone,
+    url: siteUrl(), email: company.email,
     address: { "@type": "PostalAddress", streetAddress: company.street, postalCode: company.postcode, addressLocality: company.city, addressCountry: "DE" },
   };
   return (

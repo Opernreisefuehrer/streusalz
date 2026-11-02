@@ -22,6 +22,10 @@ nicht mit Beispielpreisen oder simulierten Routen freigeschaltet.
 Kopieren Sie `.env.example` nach `.env.local` und ergänzen Sie die Konfiguration lokal.
 Umgebungsdateien, Datenbank und Mailvorschauen werden nicht in Git aufgenommen.
 
+Favicon und Apple-Icon zeigen nur die Schneeflocke, nicht das SG-Logo.
+Die PNG- und ICO-Dateien werden mit `node scripts\generate-icons.mjs` aus
+`public\snowflake.svg` erzeugt (benoetigt den vorhandenen Playwright-Browser).
+
 ### Adminzugang
 
 `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` und `SESSION_SECRET` konfigurieren.
@@ -51,6 +55,10 @@ Passwort-Hashing und Anmeldebegrenzung. Ein Passwortwechsel macht alte Sitzungen
 
 ## Geschäftsregeln
 
+- Im Einzelbestellformular wird je Gebindeart die ganzzahlige Anzahl der
+  23-t-Ladungen gewaehlt; 0 waehlt die Gebindeart ab. Es gibt kein separates
+  Mischprodukt. E-Mail ist der einzige veroeffentlichte Anbieter-Kontaktkanal;
+  die Kunden-Telefonnummer bleibt fuer die Lieferabstimmung erforderlich.
 - Verkauf nur an Gewerbetreibende und oeffentliche Auftraggeber, einschliesslich
   Staedten und Gemeinden; keine Privatkunden. Das Pflichtfeld `company` erfasst
   sowohl Unternehmens- als auch Einrichtungsnamen. Die Pflichtbestaetigung

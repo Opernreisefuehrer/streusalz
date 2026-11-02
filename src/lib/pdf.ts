@@ -45,7 +45,7 @@ export async function buildPdf(document: DocumentRow) {
   pdf.setModificationDate(new Date(document.created_at));
   write("STREUSALZ GROSSHANDEL", 21, true, 30);
   write(`${seller.name} | ${seller.street} | ${seller.postcode} ${seller.city}`, 9, false, 15);
-  write(`${seller.email} | ${seller.phone}`, 9);
+  write(seller.email + ("phone" in seller && typeof seller.phone === "string" ? ` | ${seller.phone}` : ""), 9);
   y -= 30;
   write(participant.company, 12, true);
   write(participant.contact);
