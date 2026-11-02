@@ -154,8 +154,12 @@ test("postcode all-in price appears automatically and is preserved during addres
   await expect(page.getByRole("button", { name: /Aktuellen Preis anzeigen/ })).toBeDisabled();
   await postcode.fill("55118");
   await expect(page.getByRole("status").filter({ hasText: "Aktueller Preis inkl. Lieferung" })).toContainText("8.635,00");
-  await expect(page.getByRole("status").filter({ hasText: "Aktueller Preis inkl. Lieferung" })).toHaveCSS("background-color", "rgb(237, 246, 238)");
-  await expect(summary).toHaveCSS("background-color", "rgb(237, 246, 238)");
+  await expect(page.getByRole("status").filter({ hasText: "Aktueller Preis inkl. Lieferung" })).toHaveCSS("background-color", "rgb(21, 128, 61)");
+  await expect(page.getByRole("status").filter({ hasText: "Aktueller Preis inkl. Lieferung" })).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(summary).toHaveCSS("background-color", "rgb(21, 128, 61)");
+  await expect(summary.getByRole("heading", { name: "Aktueller Preis inkl. Lieferung" })).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(tonnePrice.locator("span")).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(summary.locator(".fine-print")).toHaveCSS("color", "rgb(255, 255, 255)");
   expect(requests).toEqual([{ product: "bigbag", postcode: "55118", tonnes: 23 }]);
   await expect(page.getByLabel("Name des Unternehmens / der Einrichtung")).toHaveValue("");
   await expect(page.getByRole("button", { name: /Zahlungspflichtig bestellen/ })).toBeDisabled();
@@ -168,7 +172,7 @@ test("postcode all-in price appears automatically and is preserved during addres
   await expect(summary).toContainText("8.635,00");
   await page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ }).click();
   await expect(summary).toContainText("Teststraße 1, 55118 Mainz");
-  await expect(summary).toHaveCSS("background-color", "rgb(237, 246, 238)");
+  await expect(summary).toHaveCSS("background-color", "rgb(21, 128, 61)");
   await expect(tonnePrice).toContainText("375,43");
   expect(finalRequest).toMatchObject({ postcodePriceToken: "test-postcode-price-token", deliveries: [{ tonnes: 23, address: { street: "Teststraße 1", postcode: "55118", city: "Mainz" } }] });
   await expect(summary).toContainText("8.635,00");
@@ -238,7 +242,7 @@ test("community overview shows delivery-inclusive tonne and sack prices after ad
   await expect(tonnePrice).toContainText("385,43");
   await expect(sackPrice).toContainText("9,64");
   await expect(summary).toContainText("8.865,00");
-  await expect(summary).toHaveCSS("background-color", "rgb(237, 246, 238)");
+  await expect(summary).toHaveCSS("background-color", "rgb(21, 128, 61)");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 test("postcode price errors are visible next to the postcode form", async ({ page }) => {
