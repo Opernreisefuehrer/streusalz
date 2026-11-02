@@ -20,10 +20,10 @@ describe("B2B quantities and pricing", () => {
     const one = fixture([23]).quote, two = fixture([46]).quote;
     expect(one.freightCents).toBe(300025);
     expect(two.freightCents).toBe(one.freightCents * 2);
-    expect(one.goodsCents).toBe(23 * 16900);
+    expect(one.goodsCents).toBe(23 * 15300);
     const { input } = fixture();
     const bags = priceQuote({ ...input, product: "bags" }, { metres: 1500000, states: ["RP"], labels: ["Mainz"] });
-    expect(bags.goodsCents).toBe(23 * 15300);
+    expect(bags.goodsCents).toBe(23 * 16900);
   });
   it("allows different full-truck products in one order but only one shared truck for communities", () => {
     const items = [{ product: "bigbag" as const, tonnes: 23 }, { product: "bags" as const, tonnes: 23 }];
@@ -32,11 +32,11 @@ describe("B2B quantities and pricing", () => {
     expect(quoteInputSchema.safeParse(mixed).success).toBe(true);
     expect(quoteInputFromOrder({ ...order, items })).toEqual(mixed);
     const quote = priceQuote(mixed, { metres: 1500125, states: ["RP"], labels: ["Mainz"] });
-    expect(quote.goodsCents).toBe(23 * 16900 + 23 * 15300);
+    expect(quote.goodsCents).toBe(23 * 15300 + 23 * 16900);
     expect(quote.freightCents).toBe(600050);
     expect(quote.netCents).toBe(1340650);
     expect(quote.lines).toHaveLength(1);
-    expect(quote.items?.map(item => item.netCents)).toEqual([688725, 651925]);
+    expect(quote.items?.map(item => item.netCents)).toEqual([651925, 688725]);
     expect(quote.items?.reduce((sum, item) => sum + item.netCents, 0)).toBe(quote.netCents);
     const shared = fixture([10, 8, 5]).input;
     expect(quoteInputSchema.safeParse({ ...shared, items }).success).toBe(false);

@@ -1,6 +1,6 @@
 export const PRODUCTS = {
-  bigbag: { name: "Streusalz im BigBag", shortName: "BigBags", priceCents: 16900, unit: "1 BigBag = 1 Tonne" },
-  bags: { name: "Streusalz in 25-kg-Säcken", shortName: "25-kg-Sackware", priceCents: 15300, unit: "40 Säcke = 1 Palette = 1 Tonne" },
+  bigbag: { name: "Streusalz im BigBag", shortName: "BigBags", priceCents: 15300, unit: "1 BigBag = 1 Tonne" },
+  bags: { name: "Streusalz in 25-kg-Säcken", shortName: "25-kg-Sackware", priceCents: 16900, unit: "40 Säcke = 1 Palette = 1 Tonne" },
 } as const;
 
 export type Product = keyof typeof PRODUCTS;

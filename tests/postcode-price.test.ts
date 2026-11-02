@@ -79,7 +79,7 @@ describe("binding postcode prices including delivery", () => {
     const mock = mockRouting();
     const entries = Object.entries(germanPostcodes.postcodes);
     const expectedNet = (configuration.items ?? [{ product: configuration.product, tonnes: configuration.tonnes }])
-      .reduce((sum, item) => sum + item.tonnes * (item.product === "bigbag" ? 16900 : 15300), 0)
+      .reduce((sum, item) => sum + item.tonnes * (item.product === "bigbag" ? 15300 : 16900), 0)
       + 300025 * (configuration.tonnes / 23);
     for (const [postcode, coordinates] of entries) {
       const input = { ...configuration, postcode };
@@ -109,8 +109,8 @@ describe("binding postcode prices including delivery", () => {
     const mock = mockRouting();
     const one = await createPostcodePrice(selection);
     const two = await createPostcodePrice({ ...selection, product: "bags", tonnes: 46 });
-    expect(one.price).toMatchObject({ input: selection, netCents: 688725, vatCents: 130858, grossCents: 819583 });
-    expect(two.price.netCents).toBe(46 * 15300 + 300025 * 2);
+    expect(one.price).toMatchObject({ input: selection, netCents: 651925, vatCents: 123866, grossCents: 775791 });
+    expect(two.price.netCents).toBe(46 * 16900 + 300025 * 2);
     expect(two.price.grossCents).toBe(two.price.netCents + two.price.vatCents);
     expect(Object.keys(one.price).sort()).toEqual(["input", "createdOn", "validUntil", "netCents", "vatCents", "grossCents"].sort());
     expect(acceptedPostcodePrice(one.token, selection)).toEqual(one.price);
@@ -164,7 +164,7 @@ describe("binding postcode prices including delivery", () => {
     const selected = { ...selection, tonnes: 46, items };
     const initial = await createPostcodePrice(selected);
     expect(initial.price.netCents).toBe(1340650);
-    expect(initial.price.items).toEqual([{ ...items[0], netCents: 688725 }, { ...items[1], netCents: 651925 }]);
+    expect(initial.price.items).toEqual([{ ...items[0], netCents: 651925 }, { ...items[1], netCents: 688725 }]);
     mockRouting([[0, 3000000], [3000000, 0]]);
     const input = { ...quoteInput(), items, deliveries: [{ ...quoteInput().deliveries[0], tonnes: 46 }] };
     const response = await quotePOST(new Request("https://www.streusalz-grosshandel.de/api/quote", {
@@ -266,7 +266,7 @@ describe("binding postcode prices including delivery", () => {
     }));
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(acceptedPostcodePrice(body.token, input).netCents).toBe(688725);
+    expect(acceptedPostcodePrice(body.token, input).netCents).toBe(651925);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
   it("serves only signed all-in prices through the same-origin, rate-limited, no-store endpoint", async () => {
@@ -280,8 +280,8 @@ describe("binding postcode prices including delivery", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const body = await response.json();
     expect(Object.keys(body).sort()).toEqual(["price", "token"]);
-    expect(body.price).toMatchObject({ netCents: 688725, input: selection });
-    expect(acceptedPostcodePrice(body.token, selection).netCents).toBe(688725);
+    expect(body.price).toMatchObject({ netCents: 651925, input: selection });
+    expect(acceptedPostcodePrice(body.token, selection).netCents).toBe(651925);
     expect(rateLimit).toHaveBeenCalledWith(request, "postcode-price", 30);
     const rejected = await POST(new Request(request.url, {
       method: "POST", headers: { origin: "https://unrelated.example" }, body: JSON.stringify(selection),
