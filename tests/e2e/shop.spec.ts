@@ -71,6 +71,21 @@ test("single company is the default and community ordering is an optional specia
   await expect(page.getByLabel("BigBags: Anzahl der 23-t-Ladungen")).toHaveValue("1");
   await expect(page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen")).toHaveValue("0");
   await expect(page.getByLabel("BigBags: Anzahl der 23-t-Ladungen")).toHaveAttribute("step", "1");
+  const quantity = page.getByLabel("Menge in Tonnen", { exact: true });
+  const postcode = page.getByLabel("Liefer-PLZ", { exact: true });
+  await expect(quantity).toHaveValue("23");
+  await expect(quantity).toHaveAttribute("readonly", "");
+  const quantityBounds = await quantity.boundingBox();
+  const postcodeBounds = await postcode.boundingBox();
+  expect(quantityBounds).not.toBeNull();
+  expect(postcodeBounds).not.toBeNull();
+  if (!quantityBounds || !postcodeBounds) throw new Error("Quantity and postcode inputs are missing.");
+  if (page.viewportSize()!.width > 760) expect(Math.abs(quantityBounds.y - postcodeBounds.y)).toBeLessThan(2);
+  for (const count of await page.locator(".product-option input").all()) {
+    const bounds = await count.boundingBox();
+    expect(bounds?.width).toBeLessThanOrEqual(90);
+    expect(bounds?.height).toBeLessThanOrEqual(40);
+  }
   await expect(page.getByRole("textbox", { name: "E-Mail-Adresse", exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Telefon für die Lieferabstimmung", exact: true })).toBeVisible();
   await expect(page.locator("form")).toContainText("verbindliches Kaufangebot");
@@ -304,6 +319,7 @@ test("one order supports differently loaded trucks, correct product unit prices 
   expect(finalRequest).toMatchObject({ items: [{ product: "bigbag", tonnes: 23 }, { product: "bags", tonnes: 23 }], deliveries: [{ tonnes: 46 }], postcodePriceToken: "test-mixed-postcode-price-token" });
   await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("2");
   await expect(summary).toContainText("26.135,00");
+  await expect(page.getByLabel("Menge in Tonnen", { exact: true })).toHaveValue("69");
   expect(requests.at(-1)).toMatchObject({ tonnes: 69, items: [{ product: "bigbag", tonnes: 46 }, { product: "bags", tonnes: 23 }] });
   await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("1");
   await expect(summary).toContainText("17.500,00");
