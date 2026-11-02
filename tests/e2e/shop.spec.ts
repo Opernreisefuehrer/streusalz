@@ -366,7 +366,7 @@ test("community overview shows delivery-inclusive tonne and sack prices after ad
 test("one order supports differently loaded trucks, correct product unit prices and a single invoice recipient", async ({ page }) => {
   function amounts(input: { product: Product; tonnes: number; items?: LoadItem[] }) {
     const items = (input.items ?? [{ product: input.product, tonnes: input.tonnes }]).map(item => ({
-      ...item, netCents: item.tonnes * (item.product === "bigbag" ? 24500 : 25500) + 300000 * item.tonnes / 23,
+      ...item, netCents: item.tonnes * (item.product === "bigbag" ? 16900 : 15300) + 300000 * item.tonnes / 23,
     }));
     const netCents = items.reduce((sum, item) => sum + item.netCents, 0), vatCents = Math.round(netCents * .19);
     return { netCents, vatCents, grossCents: netCents + vatCents, ...(input.items ? { items } : {}) };
@@ -395,10 +395,10 @@ test("one order supports differently loaded trucks, correct product unit prices 
   await expect(page.locator(".participant-block")).toHaveCount(1);
   await page.getByLabel("Liefer-PLZ", { exact: true }).fill("65719");
   const summary = page.getByRole("complementary", { name: "Preisübersicht" });
-  await expect(summary).toContainText("17.500,00");
-  await expect(summary.locator(".summary-row").filter({ hasText: "23 t BigBags · pro Tonne" })).toContainText("375,43");
-  await expect(summary.locator(".summary-row").filter({ hasText: "23 t 25-kg-Sackware · pro Tonne" })).toContainText("385,43");
-  await expect(summary.locator(".summary-row").filter({ hasText: "Pro 25-kg-Sack" })).toContainText("9,64");
+  await expect(summary).toContainText("13.406,00");
+  await expect(summary.locator(".summary-row").filter({ hasText: "23 t BigBags · pro Tonne" })).toContainText("299,43");
+  await expect(summary.locator(".summary-row").filter({ hasText: "23 t 25-kg-Sackware · pro Tonne" })).toContainText("283,43");
+  await expect(summary.locator(".summary-row").filter({ hasText: "Pro 25-kg-Sack" })).toContainText("7,09");
   expect(requests[0]).toMatchObject({ tonnes: 46, items: [{ product: "bigbag", tonnes: 23 }, { product: "bags", tonnes: 23 }] });
   await page.getByLabel("Lieferanschrift: Straße und Hausnummer").fill("Teststraße 1");
   await page.getByLabel("Ort", { exact: true }).fill("Hofheim");
@@ -406,13 +406,13 @@ test("one order supports differently loaded trucks, correct product unit prices 
   await expect(summary).toContainText("Teststraße 1, 65719 Hofheim");
   expect(finalRequest).toMatchObject({ items: [{ product: "bigbag", tonnes: 23 }, { product: "bags", tonnes: 23 }], deliveries: [{ tonnes: 46 }], postcodePriceToken: "test-mixed-postcode-price-token" });
   await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("2");
-  await expect(summary).toContainText("26.135,00");
+  await expect(summary).toContainText("20.293,00");
   await expect(page.getByLabel("Menge in Tonnen", { exact: true })).toHaveValue("69");
   expect(requests.at(-1)).toMatchObject({ tonnes: 69, items: [{ product: "bigbag", tonnes: 46 }, { product: "bags", tonnes: 23 }] });
   await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("1");
-  await expect(summary).toContainText("17.500,00");
+  await expect(summary).toContainText("13.406,00");
   await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("2");
-  await expect(summary).toContainText("26.365,00");
+  await expect(summary).toContainText("19.925,00");
   await expect(summary).not.toContainText("Teststraße 1, 65719 Hofheim");
   await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("1.5");
   await expect(page.locator('.message-error[role="alert"]')).toContainText("Je Gebindeart sind volle 23-Tonnen-Ladungen erforderlich");
@@ -421,11 +421,11 @@ test("one order supports differently loaded trucks, correct product unit prices 
   await expect(summary).not.toHaveClass(/price-success/);
   await expect(page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ })).toBeDisabled();
   await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("1");
-  await expect(summary).toContainText("17.500,00");
+  await expect(summary).toContainText("13.406,00");
   await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Auftraggebern", { exact: true }).click();
   await expect(page.getByRole("button", { name: "+ Weiteren Auftraggeber hinzufügen", exact: true })).toBeDisabled();
   await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").fill("0");
-  await expect(summary).toContainText("8.635,00");
+  await expect(summary).toContainText("6.887,00");
   await expect(summary.getByText("Pro 25-kg-Sack netto inkl. Lieferung", { exact: true })).toHaveCount(0);
   expect(requests.at(-1)).not.toHaveProperty("items");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

@@ -92,8 +92,11 @@ Passwort-Hashing und Anmeldebegrenzung. Ein Passwortwechsel macht alte Sitzungen
   Staedten und Gemeinden; keine Privatkunden. Das Pflichtfeld `company` erfasst
   sowohl Unternehmens- als auch Einrichtungsnamen. Die Pflichtbestaetigung
   `businessAccepted` gilt fuer beide zugelassenen Kundengruppen.
-- Interne Warenbasis BigBags: 245 €/Tonne netto, ein BigBag pro Tonne.
-- Interne Warenbasis Sackware: 255 €/Tonne netto, 40 Säcke à 25 kg je 1-Tonnen-Palette.
+- Interne Warenbasis BigBags: 169 €/Tonne netto, ein BigBag pro Tonne.
+- Interne Warenbasis Sackware: 153 €/Tonne netto, 40 Säcke à 25 kg je 1-Tonnen-Palette.
+- Warenpreisaenderungen gelten fuer neue Preisabrufe. Noch gueltige signierte
+  PLZ-Preise behalten Gesamt- und Positionsbetraege bis zum urspruenglichen Ablauf;
+  gespeicherte Auftraege und ausgestellte Rechnungen werden nicht neu berechnet.
 - Kunden sehen Gesamtpreise inklusive Lieferung, netto plus 19 % MwSt.
   und brutto, ohne gesonderte Waren-/Frachtpositionen. Die Preisuebersicht zeigt
   immer auch den Nettopreis pro Tonne, bei Sackware zusaetzlich pro 25-kg-Sack

@@ -132,6 +132,7 @@ export async function createQuote(input: QuoteInput, postcodePriceToken?: string
   }
   const fixedFreightCents = price ? price.netCents - goodsPrice(input.product, price.input.tonnes, input.items) : undefined;
   const quote = priceQuote(input, route, new Date(), fixedFreightCents);
+  if (price?.items) quote.items = price.items;
   return { quote, token: signToken("quote", quote, price ? (price.validUntil - Date.now()) / 1000 : 30 * 60) };
 }
 export function acceptedQuote(token: string, input: QuoteInput) {

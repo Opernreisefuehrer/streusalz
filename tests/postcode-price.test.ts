@@ -7,6 +7,7 @@ import { POST as quotePOST } from "../src/app/api/quote/route";
 import { rateLimit } from "../src/lib/auth";
 import { fixture } from "./fixtures";
 import germanPostcodes from "../src/lib/data/german-postcodes.json";
+import { signToken } from "../src/lib/tokens";
 
 vi.mock("../src/lib/auth", async importOriginal => {
   const actual = await importOriginal<typeof import("../src/lib/auth")>();
@@ -78,7 +79,7 @@ describe("binding postcode prices including delivery", () => {
     const mock = mockRouting();
     const entries = Object.entries(germanPostcodes.postcodes);
     const expectedNet = (configuration.items ?? [{ product: configuration.product, tonnes: configuration.tonnes }])
-      .reduce((sum, item) => sum + item.tonnes * (item.product === "bigbag" ? 24500 : 25500), 0)
+      .reduce((sum, item) => sum + item.tonnes * (item.product === "bigbag" ? 16900 : 15300), 0)
       + 300025 * (configuration.tonnes / 23);
     for (const [postcode, coordinates] of entries) {
       const input = { ...configuration, postcode };
@@ -108,8 +109,8 @@ describe("binding postcode prices including delivery", () => {
     const mock = mockRouting();
     const one = await createPostcodePrice(selection);
     const two = await createPostcodePrice({ ...selection, product: "bags", tonnes: 46 });
-    expect(one.price).toMatchObject({ input: selection, netCents: 863525, vatCents: 164070, grossCents: 1027595 });
-    expect(two.price.netCents).toBe(46 * 25500 + 300025 * 2);
+    expect(one.price).toMatchObject({ input: selection, netCents: 688725, vatCents: 130858, grossCents: 819583 });
+    expect(two.price.netCents).toBe(46 * 15300 + 300025 * 2);
     expect(two.price.grossCents).toBe(two.price.netCents + two.price.vatCents);
     expect(Object.keys(one.price).sort()).toEqual(["input", "createdOn", "validUntil", "netCents", "vatCents", "grossCents"].sort());
     expect(acceptedPostcodePrice(one.token, selection)).toEqual(one.price);
@@ -162,8 +163,8 @@ describe("binding postcode prices including delivery", () => {
     const items = [{ product: "bigbag" as const, tonnes: 23 }, { product: "bags" as const, tonnes: 23 }];
     const selected = { ...selection, tonnes: 46, items };
     const initial = await createPostcodePrice(selected);
-    expect(initial.price.netCents).toBe(1750050);
-    expect(initial.price.items).toEqual([{ ...items[0], netCents: 863525 }, { ...items[1], netCents: 886525 }]);
+    expect(initial.price.netCents).toBe(1340650);
+    expect(initial.price.items).toEqual([{ ...items[0], netCents: 688725 }, { ...items[1], netCents: 651925 }]);
     mockRouting([[0, 3000000], [3000000, 0]]);
     const input = { ...quoteInput(), items, deliveries: [{ ...quoteInput().deliveries[0], tonnes: 46 }] };
     const response = await quotePOST(new Request("https://www.streusalz-grosshandel.de/api/quote", {
@@ -194,6 +195,24 @@ describe("binding postcode prices including delivery", () => {
     const midnight = await createPostcodePrice(selection);
     vi.advanceTimersByTime(10 * 60 * 1000);
     expect(() => acceptedPostcodePrice(midnight.token, selection)).toThrow();
+  });
+  it("preserves still-valid mixed line prices issued before a goods-price change", async () => {
+    mockRouting();
+    const items = [{ product: "bigbag" as const, tonnes: 23 }, { product: "bags" as const, tonnes: 23 }];
+    const initial = await createPostcodePrice({ ...selection, tonnes: 46, items });
+    const previousPrice = {
+      ...initial.price, netCents: 1750050, vatCents: 332510, grossCents: 2082560,
+      items: [{ ...items[0], netCents: 863525 }, { ...items[1], netCents: 886525 }],
+    };
+    const token = signToken("postcode-price", previousPrice, 1800);
+    const input = { ...quoteInput(), items, deliveries: [{ ...quoteInput().deliveries[0], tonnes: 46 }] };
+    const final = await createQuote(input, token);
+    expect(final.quote.netCents).toBe(previousPrice.netCents);
+    expect(final.quote.vatCents).toBe(previousPrice.vatCents);
+    expect(final.quote.grossCents).toBe(previousPrice.grossCents);
+    expect(final.quote.items).toEqual(previousPrice.items);
+    expect(acceptedQuote(final.token, input).items).toEqual(previousPrice.items);
+    expect(initial.price.netCents).toBe(1340650);
   });
   it("still rejects unreachable full delivery addresses even with a valid postcode price", async () => {
     mockRouting();
@@ -247,7 +266,7 @@ describe("binding postcode prices including delivery", () => {
     }));
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(acceptedPostcodePrice(body.token, input).netCents).toBe(863525);
+    expect(acceptedPostcodePrice(body.token, input).netCents).toBe(688725);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
   it("serves only signed all-in prices through the same-origin, rate-limited, no-store endpoint", async () => {
@@ -261,8 +280,8 @@ describe("binding postcode prices including delivery", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const body = await response.json();
     expect(Object.keys(body).sort()).toEqual(["price", "token"]);
-    expect(body.price).toMatchObject({ netCents: 863525, input: selection });
-    expect(acceptedPostcodePrice(body.token, selection).netCents).toBe(863525);
+    expect(body.price).toMatchObject({ netCents: 688725, input: selection });
+    expect(acceptedPostcodePrice(body.token, selection).netCents).toBe(688725);
     expect(rateLimit).toHaveBeenCalledWith(request, "postcode-price", 30);
     const rejected = await POST(new Request(request.url, {
       method: "POST", headers: { origin: "https://unrelated.example" }, body: JSON.stringify(selection),

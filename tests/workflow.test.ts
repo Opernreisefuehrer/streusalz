@@ -157,7 +157,7 @@ describe("persistent PostgreSQL order lifecycle", () => {
     const invoices = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='invoice'", [order.id]);
     expect(invoices).toHaveLength(1);
     expect(invoices[0].snapshot.items).toEqual(quote.items);
-    expect(invoices[0].snapshot.line.netCents).toBe(1750050);
+    expect(invoices[0].snapshot.line.netCents).toBe(1340650);
     const drawText = vi.spyOn(PDFPage.prototype, "drawText");
     await buildPdf(invoices[0]);
     let text = drawText.mock.calls.map(([value]) => value).join("\n");
