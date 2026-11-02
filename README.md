@@ -63,8 +63,14 @@ Passwort-Hashing und Anmeldebegrenzung. Ein Passwortwechsel macht alte Sitzungen
   (40 Saecke je Tonne). Einzelpreise werden aus dem Gesamtpreis inklusive Lieferung
   abgeleitet und auf Cent gerundet; vor dem Preisabruf bleibt eine Eingabeaufforderung
   statt eines unbelegten Betrags sichtbar.
-- Eine Gebindeart pro Auftrag, nicht mischbar.
-- Gesamtmenge 23, 46, 69 … Tonnen; volle Tonnen je Lieferadresse, maximal drei Adressen.
+- Eine Gebindeart je 23-Tonnen-Lkw. Einzelbestellungen an eine Lieferadresse
+  koennen mehrere Gebindearten in getrennten vollen Lkw-Ladungen enthalten:
+  Beispiel: 23 t BigBags + 23 t Sackware = 46 t, zwei Lkw, eine Rechnung.
+  Optionale `items` speichern Mengen und inklusive Positionspreise; alte
+  Ein-Gebinde-Snapshots bleiben ohne diese Erweiterung lesbar.
+- Einzelbestellungen: je Gebindeart 23, 46, 69 … Tonnen.
+  Gemeinschaften: genau eine 23-Tonnen-Ladung einer Gebindeart, maximal drei
+  Lieferadressen; der Kunde gibt positive Teilmengen in vollen Tonnen selbst an.
 - Alle Adressen müssen **untereinander in beiden Richtungen** höchstens 20 Straßenkilometer
   auseinanderliegen. Nur Deutschland.
 - Je 23-Tonnen-Lkw: 2 €/Straßenkilometer netto für die einfache gemeinsame Strecke.

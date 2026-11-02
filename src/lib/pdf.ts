@@ -58,8 +58,11 @@ export async function buildPdf(document: DocumentRow) {
   write(`Ausstellungsdatum: ${displayDate(issueDate)} | Bestellung: ${orderNumber}`, 10);
   write(`${document.kind === "delivery" ? "Lieferdatum" : "Voraussichtliche Lieferung (unverbindlich)"}: ${displayDate(deliveredOn || line.deliveryDate)}`, 10);
   y -= 22;
-  write(`${line.tonnes} Tonnen ${PRODUCTS[product].name}`, 13, true, 24);
-  write(product === "bags" ? `${line.tonnes} Paletten mit je 40 x 25 kg (${line.tonnes * 40} Säcke)` : `${line.tonnes} BigBags mit je 1.000 kg`, 10);
+  for (const item of document.snapshot.items ?? [{ product, tonnes: line.tonnes }]) {
+    write(`${item.tonnes} Tonnen ${PRODUCTS[item.product].name}`, 13, true, 24);
+    write(item.product === "bags" ? `${item.tonnes} Paletten mit je 40 x 25 kg (${item.tonnes * 40} Säcke)` : `${item.tonnes} BigBags mit je 1.000 kg`, 10);
+    if (document.kind === "invoice" && "netCents" in item) write(`Positionspreis netto inkl. Lieferung: ${money(item.netCents)}`, 10);
+  }
   if (document.kind === "invoice") {
     y -= 20;
     if (line.deliveryIncluded) {

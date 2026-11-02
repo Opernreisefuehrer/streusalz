@@ -4,6 +4,13 @@ export const PRODUCTS = {
 } as const;
 
 export type Product = keyof typeof PRODUCTS;
+export interface LoadItem { product: Product; tonnes: number }
+export function productLabel(product: Product, items?: LoadItem[]) {
+  return items ? items.map(item => PRODUCTS[item.product].shortName).join(" + ") : PRODUCTS[product].shortName;
+}
+export function productContents(product: Product, tonnes: number, items?: LoadItem[]) {
+  return (items ?? [{ product, tonnes }]).map(item => `${item.tonnes} Tonnen ${PRODUCTS[item.product].name}`).join("\n");
+}
 export const TRUCK_TONNES = 23;
 export const VAT_PERCENT = 19;
 export function money(cents: number) {

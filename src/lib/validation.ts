@@ -1,6 +1,19 @@
 import { z } from "zod";
+import type { LoadItem } from "./catalog";
 
 const text = z.string().trim().min(1, "Bitte ausfüllen.").max(160);
+const mixedItemsSchema = z.array(z.object({
+  product: z.enum(["bigbag", "bags"]),
+  tonnes: z.number().int().min(23).refine(value => Number.isSafeInteger(value) && value % 23 === 0, "Je Gebindeart sind volle 23-Tonnen-Ladungen erforderlich."),
+})).length(2).refine(items => new Set(items.map(item => item.product)).size === 2, "Bitte jede Gebindeart genau einmal angeben.");
+function validateLoads(items: LoadItem[] | undefined, total: number, addresses: number, context: z.RefinementCtx) {
+  if (items && (addresses !== 1 || items.reduce((sum, item) => sum + item.tonnes, 0) !== total)) {
+    context.addIssue({ code: "custom", message: "Die Gebindemengen müssen der Gesamtmenge entsprechen. Unterschiedliche Gebindearten sind nur bei einer Lieferadresse möglich.", path: ["items"] });
+  }
+  if (addresses > 1 && total !== 23) {
+    context.addIssue({ code: "custom", message: "Eine Gemeinschaftsbestellung teilt genau eine 23-Tonnen-Ladung einer Gebindeart. Bitte die Teilmengen entsprechend angeben." });
+  }
+}
 export const postcodeSchema = z.string().regex(/^\d{5}$/, "Bitte eine deutsche, fünfstellige Postleitzahl angeben.");
 export const addressSchema = z.object({
   street: text,
@@ -11,7 +24,8 @@ export const postcodePriceInputSchema = z.object({
   product: z.enum(["bigbag", "bags"]),
   postcode: postcodeSchema,
   tonnes: z.number().int().min(23).refine(value => Number.isSafeInteger(value) && value % 23 === 0, "Die Menge muss 23, 46, 69 … Tonnen ergeben."),
-});
+  items: mixedItemsSchema.optional(),
+}).superRefine((input, context) => validateLoads(input.items, input.tonnes, 1, context));
 export type PostcodePriceInput = z.infer<typeof postcodePriceInputSchema>;
 export const participantSchema = z.object({
   company: text,
@@ -25,12 +39,14 @@ export const participantSchema = z.object({
 });
 export const quoteInputSchema = z.object({
   product: z.enum(["bigbag", "bags"]),
+  items: mixedItemsSchema.optional(),
   deliveries: z.array(z.object({ tonnes: z.number().int().min(1), address: addressSchema })).min(1).max(3),
 }).superRefine((input, context) => {
   const total = input.deliveries.reduce((sum, delivery) => sum + delivery.tonnes, 0);
   if (!Number.isSafeInteger(total) || total % 23 !== 0) {
     context.addIssue({ code: "custom", message: "Die Gesamtmenge muss volle 23-Tonnen-Ladungen ergeben: 23, 46, 69 … Tonnen.", path: ["deliveries"] });
   }
+  validateLoads(input.items, total, input.deliveries.length, context);
 });
 export const quoteRequestSchema = quoteInputSchema.and(z.object({
   postcodePriceToken: z.string().min(10).max(4000).optional(),
@@ -40,16 +56,18 @@ export const orderInputSchema = z.object({
   requestId: z.uuid(),
   legalVersion: z.string().regex(/^[a-f0-9]{64}$/, "Die Fassung der Vertragsbedingungen ist ungültig. Bitte laden Sie das Bestellformular neu."),
   product: z.enum(["bigbag", "bags"]),
+  items: mixedItemsSchema.optional(),
   participants: z.array(participantSchema).min(1).max(3),
   businessAccepted: z.literal(true, { error: "Bestellungen sind ausschließlich für Gewerbetreibende und öffentliche Auftraggeber. Kein Verkauf an Privatkunden." }),
   termsAccepted: z.literal(true, { error: "Bitte die AGB bestätigen." }),
-});
+}).superRefine((input, context) => validateLoads(input.items, input.participants.reduce((sum, participant) => sum + participant.tonnes, 0), input.participants.length, context));
 export type QuoteInput = z.infer<typeof quoteInputSchema>;
 export type Participant = z.infer<typeof participantSchema>;
 export type OrderInput = z.infer<typeof orderInputSchema>;
 export function quoteInputFromOrder(order: OrderInput): QuoteInput {
   return quoteInputSchema.parse({
     product: order.product,
+    ...(order.items ? { items: order.items } : {}),
     deliveries: order.participants.map(({ tonnes, address }) => ({ tonnes, address })),
   });
 }

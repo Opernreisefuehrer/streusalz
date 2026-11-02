@@ -4,7 +4,7 @@ import { z } from "zod";
 import { adminPage } from "@/lib/admin-page";
 import { database } from "@/lib/db";
 import { getOrder, STATUS_LABELS, type DocumentRow, type MailRow } from "@/lib/orders";
-import { PRODUCTS, money, displayDate } from "@/lib/catalog";
+import { productContents, money, displayDate } from "@/lib/catalog";
 import { berlinDate, dueDate } from "@/lib/delivery-date";
 import { OrderActions, RetryMail } from "@/components/admin-controls";
 
@@ -20,7 +20,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ id: st
     db.query<{ created_at: Date | string; action: string; actor: string }>("SELECT created_at,action,actor FROM audit_log WHERE order_id=$1 ORDER BY created_at", [id]),
   ]);
   const pending = mails.some(mail => mail.status === "failed" || mail.status === "pending" || mail.status === "sending");
-  return <div className="container admin-shell"><div className="breadcrumbs"><Link href="/admin">Bestellverwaltung</Link> / {order.number}</div><div className="admin-top"><div><h1>{order.number}</h1><p>{PRODUCTS[order.snapshot.product].name} · {order.snapshot.quote.totalTonnes} Tonnen</p></div><span className={`badge badge-${order.status}`}>{STATUS_LABELS[order.status]}</span></div>
+  return <div className="container admin-shell"><div className="breadcrumbs"><Link href="/admin">Bestellverwaltung</Link> / {order.number}</div><div className="admin-top"><div><h1>{order.number}</h1><p style={{ whiteSpace: "pre-line" }}>{productContents(order.snapshot.product, order.snapshot.quote.totalTonnes, order.snapshot.items)}</p></div><span className={`badge badge-${order.status}`}>{STATUS_LABELS[order.status]}</span></div>
     {pending && <div className="message message-info">Mindestens eine E-Mail ist noch nicht erfolgreich zum Versand übergeben worden. Der Auftragsstatus und der E-Mail-Versandstatus sind getrennt; bitte unten prüfen.</div>}
     <div className="admin-detail-grid"><div><section className="panel"><p className="eyebrow">UNTERNEHMEN & TEILBETRÄGE</p><h2>Lieferungen und Rechnungen</h2>{order.snapshot.participants.map((participant, index) => {
       const line = order.snapshot.quote.lines[index];
