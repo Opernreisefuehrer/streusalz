@@ -437,17 +437,17 @@ test("provided brand logo, favicons and technical package drawings appear consis
   await expect(page.locator(".hero-image")).toHaveAttribute("alt", /volle 1-Tonnen-Palette mit 40 Säcken/);
   await expect(page.locator(".hero-image")).toHaveAttribute("alt", /feinkörnigem Streusalz/);
 });
-test("public seller contact is email-only on the homepage and legal pages", async ({ page }) => {
-  for (const path of ["/", "/impressum", "/agb", "/datenschutz"]) {
-    await page.goto(path);
+for (const path of ["/", "/impressum", "/agb", "/datenschutz"]) {
+  test(`public seller contact is email-only on ${path}`, async ({ page }) => {
+    await page.goto(path, { waitUntil: "domcontentloaded" });
     await expect(page.locator('a[href^="tel:"]')).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("01523-6183155");
     await expect(page.locator('a[href="mailto:info@streusalz-grosshandel.de"]').first()).toBeVisible();
     if (path === "/") {
       expect(await page.locator('script[type="application/ld+json"]').allTextContents()).not.toContainEqual(expect.stringContaining('"telephone"'));
     }
-  }
-});
+  });
+}
 test("legal pages explain necessary storage and show the correct privacy contact", async ({ page }) => {
   await page.goto("/datenschutz");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Datenschutzerklärung");

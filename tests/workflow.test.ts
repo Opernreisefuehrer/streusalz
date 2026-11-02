@@ -42,6 +42,8 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(sendMail.mock.calls[0][0].text).toContain("14 Tage nach tatsächlicher Lieferung");
     expect(sendMail.mock.calls[0][0].text).toContain("Zahlbar ohne Abzug. Kein Skonto.");
     expect(sendMail.mock.calls[0][0].text).toContain("Gesamt netto inkl. Lieferung:");
+    expect(sendMail.mock.calls[0][0].text).not.toContain("01523-6183155");
+    expect(sendMail.mock.calls[0][0].text).not.toMatch(/\bundefined\b/);
     expect(sendMail.mock.calls[0][0].text).not.toMatch(/\n(?:Warenwert|Lieferkosten) netto:/);
     expect(sendMail.mock.calls[0][0].text).toContain(order.snapshot.termsText);
     await confirmSupplier(db, order.id, "SUPPLIER-TEST-42", "admin");
@@ -88,11 +90,15 @@ describe("persistent PostgreSQL order lifecycle", () => {
     const [invoice] = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='invoice'", [order.id]);
     delete invoice.snapshot.line.deliveryIncluded;
     delete invoice.snapshot.paymentWithoutDiscount;
+    expect(invoice.snapshot.seller).not.toHaveProperty("phone");
+    if (!invoice.snapshot.seller) throw new Error("The new invoice seller snapshot is missing.");
+    Object.assign(invoice.snapshot.seller, { phone: "HISTORICAL-SELLER-PHONE" });
     const drawText = vi.spyOn(PDFPage.prototype, "drawText");
     await buildPdf(invoice);
     const text = drawText.mock.calls.map(([text]) => text).join("\n");
     expect(text).toContain("Warenwert netto:");
     expect(text).toContain("Lieferkosten netto");
+    expect(text).toContain("HISTORICAL-SELLER-PHONE");
     expect(text).not.toContain("Kein Skonto");
   });
   it("deduplicates retried orders and refuses reuse with changed customer data", async () => {
