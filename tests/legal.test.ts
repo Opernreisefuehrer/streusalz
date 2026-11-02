@@ -19,6 +19,10 @@ describe("consistent legal content and accurate technical notices", () => {
     expect(text).toContain("ausdrückliche Auftragsannahme");
     expect(text).toContain("Straße und Hausnummer innerhalb derselben Liefer-PLZ verändern diesen Preis nicht");
     expect(text).toContain("keine zusätzlichen Lieferkosten");
+    expect(text).toContain("öffentliche Auftraggeber, insbesondere Städte, Gemeinden und kommunale Einrichtungen");
+    expect(text).toContain("Kein Verkauf an Privatkunden");
+    expect(text).toContain("Bis zu drei Unternehmen oder öffentliche Auftraggeber");
+    expect(text).toContain("öffentliche Auftraggeber ohne Kaufmannseigenschaft");
     expect(text).not.toContain("Hinzu kommen die im Bestellabschluss ausgewiesenen Lieferkosten");
     expect(text).not.toContain("Dej");
   });
@@ -36,6 +40,7 @@ describe("consistent legal content and accurate technical notices", () => {
     expect(text).toContain("Art. 14 DSGVO");
     expect(text).toContain("acht Jahre");
     expect(text).toContain("keine Öffnungs- oder Marketing-Trackingpixel");
+    expect(text).toContain("eines Unternehmens oder eines öffentlichen Auftraggebers");
   });
   it("keeps source text, optional overrides and content hashes synchronized", () => {
     const before = legalTexts();
@@ -58,6 +63,8 @@ describe("consistent legal content and accurate technical notices", () => {
     vi.stubEnv("SELLER_VAT_ID", "DE123456789");
     vi.stubEnv("SELLER_WID", "DE987654321-00001");
     const html = renderToStaticMarkup(Imprint());
+    expect(html).toContain("öffentliche Auftraggeber, z. B. Städte und Gemeinden");
+    expect(html).toContain("Kein Verkauf an Privatkunden");
     expect(html).toContain("DE123456789");
     expect(html).toContain("DE987654321-00001");
     expect(html).not.toContain("PRIVATE-TAX-NUMBER-TEST");

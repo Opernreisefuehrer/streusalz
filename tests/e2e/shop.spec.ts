@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 test("homepage preserves the legacy search title, topic and canonical identity", async ({ page, request }) => {
   await page.goto("/");
-  const description = "Streusalz für Wege, Einfahrten und Straßen: BigBags und 25-kg-Säcke ab 23 Tonnen. Bundesweite Lieferung auf Rechnung, nur für Gewerbe.";
+  const description = "Streusalz für Wege, Einfahrten und Straßen: BigBags und 25-kg-Säcke ab 23 Tonnen. Bundesweite Lieferung auf Rechnung für Gewerbe, Städte und Gemeinden.";
   await expect(page).toHaveTitle("Streusalz Großhandel");
   await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", description);
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "Streusalz Großhandel");
@@ -61,16 +61,23 @@ test("professional storefront, navigation and responsive layout", async ({ page 
 });
 test("single company is the default and community ordering is an optional special case", async ({ page }) => {
   await page.goto("/bestellen");
-  await expect(page.getByRole("heading", { name: "Ihr Unternehmen", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ihr Unternehmen oder Ihre Einrichtung", exact: true })).toBeVisible();
+  await expect(page.locator("form .eyebrow").first()).toHaveText("01 · MENGE & PREIS");
+  await expect(page.locator(".site-footer")).toContainText("Nur für Gewerbetreibende und öffentliche Auftraggeber, z. B. Städte und Gemeinden. Kein Verkauf an Privatkunden.");
   await expect(page.locator(".participant-block")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Rechnungsempfänger & Lieferung" })).toBeVisible();
   await expect(page.getByLabel("Menge in vollen Tonnen")).toHaveValue("23");
   await expect(page.getByLabel("Menge in vollen Tonnen")).toHaveAttribute("step", "23");
-  await expect(page.getByRole("checkbox", { name: /Ich bestelle ausschließlich gewerblich/ })).not.toHaveAccessibleName(/Teilnehmer/);
+  const business = page.getByRole("checkbox", { name: /Ich bestelle für ein Unternehmen oder einen öffentlichen Auftraggeber/ });
+  await expect(business).not.toHaveAccessibleName(/Teilnehmer/);
+  await page.getByLabel("Name des Unternehmens / der Einrichtung").fill("Gemeinde Musterhausen");
+  await business.check();
+  await expect(business).toBeChecked();
+  await expect(page.getByLabel("USt-IdNr. (optional)")).not.toHaveAttribute("required");
   await expect(page.getByRole("complementary", { name: "Preisübersicht" })).toContainText("Lieferadresse / Rechnung");
-  const add = page.getByRole("button", { name: "+ Weiteres Unternehmen hinzufügen", exact: true });
+  const add = page.getByRole("button", { name: "+ Weiteren Auftraggeber hinzufügen", exact: true });
   await expect(add).toBeHidden();
-  await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Unternehmen", { exact: true }).click();
+  await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Auftraggebern", { exact: true }).click();
   await add.click();
   await expect(page.getByRole("heading", { name: "Ihre Bestellgemeinschaft" })).toBeVisible();
   await expect(page.locator(".participant-block")).toHaveCount(2);
@@ -84,7 +91,7 @@ test("single company is the default and community ordering is an optional specia
   await expect(page.locator(".participant-block")).toHaveCount(1);
   await expect(page.getByLabel("Menge in vollen Tonnen")).toHaveValue("23");
   await expect(page.getByRole("heading", { name: "Rechnungsempfänger & Lieferung" })).toBeVisible();
-  await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Unternehmen", { exact: true }).click();
+  await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Auftraggebern", { exact: true }).click();
   await add.click();
   const secondCompany = page.locator(".participant-block").nth(1);
   await secondCompany.getByRole("checkbox", { name: "Abweichende Rechnungsanschrift" }).check();
@@ -113,7 +120,7 @@ test("postcode all-in price appears automatically and is preserved during addres
   await postcode.fill("55118");
   await expect(page.getByRole("status").filter({ hasText: "Aktueller Preis inkl. Lieferung" })).toContainText("8.635,00");
   expect(requests).toEqual([{ product: "bigbag", postcode: "55118", tonnes: 23 }]);
-  await expect(page.getByLabel("Firmenname")).toHaveValue("");
+  await expect(page.getByLabel("Name des Unternehmens / der Einrichtung")).toHaveValue("");
   await expect(page.getByRole("button", { name: /Zahlungspflichtig bestellen/ })).toBeDisabled();
   await expect(page.locator(".participant-block").getByLabel("Postleitzahl")).toHaveValue("55118");
   const summary = page.getByRole("complementary", { name: "Preisübersicht" });

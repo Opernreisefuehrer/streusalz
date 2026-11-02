@@ -51,6 +51,10 @@ Passwort-Hashing und Anmeldebegrenzung. Ein Passwortwechsel macht alte Sitzungen
 
 ## Geschäftsregeln
 
+- Verkauf nur an Gewerbetreibende und oeffentliche Auftraggeber, einschliesslich
+  Staedten und Gemeinden; keine Privatkunden. Das Pflichtfeld `company` erfasst
+  sowohl Unternehmens- als auch Einrichtungsnamen. Die Pflichtbestaetigung
+  `businessAccepted` gilt fuer beide zugelassenen Kundengruppen.
 - Interne Warenbasis BigBags: 245 €/Tonne netto, ein BigBag pro Tonne.
 - Interne Warenbasis Sackware: 255 €/Tonne netto, 40 Säcke à 25 kg je 1-Tonnen-Palette.
 - Kunden sehen ausschliesslich Gesamtpreise inklusive Lieferung, netto plus 19 % MwSt.

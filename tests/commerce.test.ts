@@ -25,6 +25,20 @@ describe("B2B quantities and pricing", () => {
     const bags = priceQuote({ ...input, product: "bags" }, { metres: 1500000, states: ["RP"], labels: ["Mainz"] });
     expect(bags.goodsCents).toBe(23 * 25500);
   });
+  it("allows municipalities without VAT IDs and mixed business/public community orders with eligibility confirmation", () => {
+    const municipal = fixture().order;
+    municipal.participants[0].company = "Gemeinde Musterhausen";
+    municipal.participants[0].vatId = "";
+    expect(orderInputSchema.parse(municipal).participants[0].company).toBe("Gemeinde Musterhausen");
+    const mixed = fixture([10, 8, 5]).order;
+    mixed.participants[1].company = "Gemeinde Musterhausen";
+    mixed.participants[1].vatId = "";
+    mixed.participants[2].company = "Stadt Beispielstadt";
+    expect(orderInputSchema.safeParse(mixed).success).toBe(true);
+    const unconfirmed = orderInputSchema.safeParse({ ...municipal, businessAccepted: false });
+    expect(unconfirmed.success).toBe(false);
+    if (!unconfirmed.success) expect(unconfirmed.error.issues[0].message).toContain("öffentliche Auftraggeber");
+  });
   it("allocates cents by tonne share, preserving sums on separate invoices including VAT", () => {
     expect(proportionalShares(100, [1, 1, 1])).toEqual([34, 33, 33]);
     const { quote } = fixture([10, 8, 5]);
