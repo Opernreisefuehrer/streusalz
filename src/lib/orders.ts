@@ -22,6 +22,7 @@ export interface OrderSnapshot {
   termsText: string;
   privacyText: string;
   legalVersion: string;
+  paymentWithoutDiscount?: boolean;
 }
 export interface OrderRow {
   id: string;
@@ -42,6 +43,7 @@ export interface DocumentSnapshot {
   issueDate: string;
   deliveredOn?: string;
   invoiceNumber?: string;
+  paymentWithoutDiscount?: boolean;
 }
 export interface DocumentRow {
   id: string;
@@ -90,11 +92,11 @@ export async function createOrder(db: Database, input: OrderInput, quote: Quote)
     const [{ seq }] = await tx.query<{ seq: string }>("SELECT nextval('order_numbers')::text AS seq");
     const id = randomUUID();
     const number = `B-${quote.createdOn.slice(0, 4)}-${seq.padStart(6, "0")}`;
-    const snapshot: OrderSnapshot = { product: input.product, participants: input.participants, quote, termsText: conditions.terms, privacyText: conditions.privacy, legalVersion: conditions.version };
+    const snapshot: OrderSnapshot = { product: input.product, participants: input.participants, quote, termsText: conditions.terms, privacyText: conditions.privacy, legalVersion: conditions.version, paymentWithoutDiscount: true };
     for (const [index, participant] of input.participants.entries()) {
       await buildPdf({
         id, order_id: id, participant_index: index, kind: "invoice", number, created_at: new Date(),
-        snapshot: { seller: seller(), participant, product: input.product, line: quote.lines[index], orderNumber: number, issueDate: quote.createdOn },
+        snapshot: { seller: seller(), participant, product: input.product, line: quote.lines[index], orderNumber: number, issueDate: quote.createdOn, paymentWithoutDiscount: snapshot.paymentWithoutDiscount },
       });
     }
     const [order] = await tx.query<OrderRow>(
@@ -103,11 +105,11 @@ export async function createOrder(db: Database, input: OrderInput, quote: Quote)
     );
     for (const [index, participant] of input.participants.entries()) {
       const line = quote.lines[index];
-      const body = `Guten Tag ${participant.contact},\n\nvielen Dank für Ihre Bestellung bei Streusalz Großhandel.\nIhre Bestellung ${number} ist eingegangen. Dies ist eine Eingangsbestätigung, noch keine Lieferzusage oder Rechnung.\n\nIhre Bestellung:\n${line.tonnes} Tonnen ${PRODUCTS[input.product].name}, inklusive Lieferung\nGesamt netto inkl. Lieferung: ${money(line.netCents)}\n19 % MwSt.: ${money(line.vatCents)}\nGesamt brutto inkl. Lieferung: ${money(line.grossCents)}\n\nLieferadresse: ${participant.company}, ${participant.address.street}, ${participant.address.postcode} ${participant.address.city}\nVoraussichtlicher Liefertermin: ${displayDate(line.deliveryDate)} (unverbindlich)\n\nWir stimmen Ihre Bestellung mit unserem Lieferanten ab. Nach dessen Bestätigung erhalten Sie die manuell freigegebene Rechnung. Zahlungsziel: 14 Tage nach tatsächlicher Lieferung.\n${input.participants.length > 1 ? "\nBei Gemeinschaftsbestellungen erhält jedes teilnehmende Unternehmen eine eigene Rechnung über seinen Gesamtpreis inklusive Lieferung.\n" : ""}\nFreundliche Grüße\nStreusalz Großhandel\n${seller().name}\n${seller().email}\n${seller().phone}`;
+      const body = `Guten Tag ${participant.contact},\n\nvielen Dank für Ihre Bestellung bei Streusalz Großhandel.\nIhre Bestellung ${number} ist eingegangen. Dies ist eine Eingangsbestätigung, noch keine Lieferzusage oder Rechnung.\n\nIhre Bestellung:\n${line.tonnes} Tonnen ${PRODUCTS[input.product].name}, inklusive Lieferung\nGesamt netto inkl. Lieferung: ${money(line.netCents)}\n19 % MwSt.: ${money(line.vatCents)}\nGesamt brutto inkl. Lieferung: ${money(line.grossCents)}\n\nLieferadresse: ${participant.company}, ${participant.address.street}, ${participant.address.postcode} ${participant.address.city}\nVoraussichtlicher Liefertermin: ${displayDate(line.deliveryDate)} (unverbindlich)\n\nWir stimmen Ihre Bestellung mit unserem Lieferanten ab. Nach dessen Bestätigung erhalten Sie die manuell freigegebene Rechnung. Zahlungsziel: 14 Tage nach tatsächlicher Lieferung. Zahlbar ohne Abzug. Kein Skonto.\n${input.participants.length > 1 ? "\nBei Gemeinschaftsbestellungen erhält jeder teilnehmende Auftraggeber eine eigene Rechnung über seinen Gesamtpreis inklusive Lieferung.\n" : ""}\nFreundliche Grüße\nStreusalz Großhandel\n${seller().name}\n${seller().email}\n${seller().phone}`;
       await enqueue(tx, id, participant.email, `Vielen Dank für Ihre Bestellung ${number}`, `${body}\n\nDies ist noch keine Auftragsannahme. Hier erhalten Sie die bei Ihrer Bestellabgabe geltenden AGB:\n\n${snapshot.termsText}\n\nDatenschutzhinweise zur Verarbeitung Ihrer Angaben, auch bei Eintragung durch einen Gemeinschaftsbesteller:\n${siteUrl()}/datenschutz`);
     }
     await enqueue(tx, id, process.env.ADMIN_EMAIL || seller().email, `Neue Bestellung ${number} · ${quote.totalTonnes} Tonnen`,
-      `Neue gewerbliche Bestellung ${number}\n\n${PRODUCTS[input.product].name}\nGesamtmenge: ${quote.totalTonnes} Tonnen (${quote.trucks} Lkw)\nGesamt brutto: ${money(quote.grossCents)}\n\n${input.participants.map((participant, index) => `${participant.company}: ${participant.tonnes} t\n${participant.address.street}, ${participant.address.postcode} ${participant.address.city}\nKontakt: ${participant.contact}, ${participant.email}, ${participant.phone}\nTeilbetrag brutto: ${money(quote.lines[index].grossCents)}`).join("\n\n")}\n\nBitte manuell beim Lieferanten bestellen, dessen Bestätigung erfassen und erst danach die Rechnungen freigeben.\nGeschützte Verwaltung: ${siteUrl()}/admin/bestellungen/${id}`);
+      `Neue Bestellung ${number}\n\n${PRODUCTS[input.product].name}\nGesamtmenge: ${quote.totalTonnes} Tonnen (${quote.trucks} Lkw)\nGesamt brutto: ${money(quote.grossCents)}\n\n${input.participants.map((participant, index) => `${participant.company}: ${participant.tonnes} t\n${participant.address.street}, ${participant.address.postcode} ${participant.address.city}\nKontakt: ${participant.contact}, ${participant.email}, ${participant.phone}\nTeilbetrag brutto: ${money(quote.lines[index].grossCents)}`).join("\n\n")}\n\nBitte manuell beim Lieferanten bestellen, dessen Bestätigung erfassen und erst danach die Rechnungen freigeben.\nGeschützte Verwaltung: ${siteUrl()}/admin/bestellungen/${id}`);
     await audit(tx, id, "Bestellung erfasst; Kundenbestätigungen und Adminbenachrichtigung in Versandwarteschlange", "customer");
     return order;
   });
@@ -127,7 +129,7 @@ async function insertDocument(tx: Database, order: OrderRow, index: number, kind
   const number = `${kind === "invoice" ? "R" : "L"}-${issueDate.slice(0, 4)}-${seq.padStart(6, "0")}`;
   const snapshot: DocumentSnapshot = {
     seller: seller(), participant: order.snapshot.participants[index], product: order.snapshot.product,
-    line: order.snapshot.quote.lines[index], orderNumber: order.number, issueDate,
+    line: order.snapshot.quote.lines[index], orderNumber: order.number, issueDate, paymentWithoutDiscount: order.snapshot.paymentWithoutDiscount,
     ...(deliveredOn ? { deliveredOn } : {}),
   };
   if (kind === "delivery") {
@@ -135,6 +137,7 @@ async function insertDocument(tx: Database, order: OrderRow, index: number, kind
     if (!invoice) throw new AppError("Für diese Lieferung fehlt die freigegebene Rechnung.", 409);
     snapshot.invoiceNumber = invoice.number;
     snapshot.seller = invoice.snapshot.seller;
+    snapshot.paymentWithoutDiscount = invoice.snapshot.paymentWithoutDiscount;
   }
   const document: DocumentRow = { id: randomUUID(), order_id: order.id, participant_index: index, kind, number, created_at: new Date(), snapshot };
   await buildPdf(document);
@@ -142,8 +145,8 @@ async function insertDocument(tx: Database, order: OrderRow, index: number, kind
     [document.id, order.id, index, kind, number, JSON.stringify(snapshot)]);
   const participant = snapshot.participant;
   const body = kind === "invoice"
-    ? `Guten Tag ${participant.contact},\n\nunser Lieferant hat Ihre Bestellung ${order.number} bestätigt. Hiermit nehmen wir Ihr Angebot für ${snapshot.line.tonnes} Tonnen ${PRODUCTS[snapshot.product].name} zu den bei Bestellung bestätigten Bedingungen ausdrücklich an.\n\nAnbei erhalten Sie Ihre Rechnung ${number} über ${money(snapshot.line.grossCents)} ${snapshot.line.deliveryIncluded ? "inklusive Lieferung und MwSt." : "inklusive MwSt."}${order.snapshot.participants.length > 1 ? " Sie schulden nur Ihren eigenen Rechnungsbetrag, nicht die Rechnungsbeträge anderer Teilnehmer." : ""}\n\nVoraussichtlicher Liefertermin: ${displayDate(snapshot.line.deliveryDate)} (unverbindlich).\nZahlungsziel: 14 Tage nach der tatsächlichen Lieferung, nicht 14 Tage nach Rechnungsdatum. Das konkrete Fälligkeitsdatum teilen wir Ihnen nach der Lieferung mit.\n\nBitte geben Sie bei der Überweisung Ihre Rechnungsnummer ${number} an.\n\nFreundliche Grüße\nStreusalz Großhandel\n${snapshot.seller.name}\n${snapshot.seller.email}\n\nBei Bestellung vereinbarte AGB:\n\n${order.snapshot.termsText}`
-    : `Guten Tag ${participant.contact},\n\nIhre Lieferung zur Bestellung ${order.number} wurde am ${displayDate(deliveredOn!)} als geliefert erfasst. Anbei erhalten Sie den Lieferschein ${number}.\n\nIhre Rechnung ${snapshot.invoiceNumber} ist am ${displayDate(dueDate(deliveredOn!))} fällig (14 Tage nach Lieferung). Sollten Sie bereits bezahlt haben, ist keine weitere Zahlung erforderlich.\n\nBei Rückfragen zur Lieferung kontaktieren Sie uns bitte.\n\nFreundliche Grüße\nStreusalz Großhandel\n${snapshot.seller.name}\n${snapshot.seller.email}`;
+    ? `Guten Tag ${participant.contact},\n\nunser Lieferant hat Ihre Bestellung ${order.number} bestätigt. Hiermit nehmen wir Ihr Angebot für ${snapshot.line.tonnes} Tonnen ${PRODUCTS[snapshot.product].name} zu den bei Bestellung bestätigten Bedingungen ausdrücklich an.\n\nAnbei erhalten Sie Ihre Rechnung ${number} über ${money(snapshot.line.grossCents)} ${snapshot.line.deliveryIncluded ? "inklusive Lieferung und MwSt." : "inklusive MwSt."}${order.snapshot.participants.length > 1 ? " Sie schulden nur Ihren eigenen Rechnungsbetrag, nicht die Rechnungsbeträge anderer Teilnehmer." : ""}\n\nVoraussichtlicher Liefertermin: ${displayDate(snapshot.line.deliveryDate)} (unverbindlich).\nZahlungsziel: 14 Tage nach der tatsächlichen Lieferung, nicht 14 Tage nach Rechnungsdatum.${snapshot.paymentWithoutDiscount ? " Zahlbar ohne Abzug. Kein Skonto." : ""} Das konkrete Fälligkeitsdatum teilen wir Ihnen nach der Lieferung mit.\n\nBitte geben Sie bei der Überweisung Ihre Rechnungsnummer ${number} an.\n\nFreundliche Grüße\nStreusalz Großhandel\n${snapshot.seller.name}\n${snapshot.seller.email}\n\nBei Bestellung vereinbarte AGB:\n\n${order.snapshot.termsText}`
+    : `Guten Tag ${participant.contact},\n\nIhre Lieferung zur Bestellung ${order.number} wurde am ${displayDate(deliveredOn!)} als geliefert erfasst. Anbei erhalten Sie den Lieferschein ${number}.\n\nIhre Rechnung ${snapshot.invoiceNumber} ist am ${displayDate(dueDate(deliveredOn!))} fällig (14 Tage nach Lieferung).${snapshot.paymentWithoutDiscount ? " Zahlbar ohne Abzug. Kein Skonto." : ""} Sollten Sie bereits bezahlt haben, ist keine weitere Zahlung erforderlich.\n\nBei Rückfragen zur Lieferung kontaktieren Sie uns bitte.\n\nFreundliche Grüße\nStreusalz Großhandel\n${snapshot.seller.name}\n${snapshot.seller.email}`;
   await enqueue(tx, order.id, participant.email, `${kind === "invoice" ? "Auftragsannahme und Rechnung" : "Lieferschein"} ${number} · ${order.number}`, body, document.id);
   return document;
 }

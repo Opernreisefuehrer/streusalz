@@ -14,6 +14,7 @@ describe("consistent legal content and accurate technical notices", () => {
     expect(text).toContain("40 Säcke à 25 kg");
     expect(text).toContain("nur seinen eigenen Teilbetrag");
     expect(text).toContain("14 Kalendertage nach der tatsächlichen Lieferung");
+    expect(text).toContain("vollständig ohne Abzug zu zahlen. Skonto wird nicht gewährt.");
     expect(text).toContain("Kunde organisiert die geeignete und sichere Entladung");
     expect(text).toContain("Eingang der Bestellung");
     expect(text).toContain("ausdrückliche Auftragsannahme");

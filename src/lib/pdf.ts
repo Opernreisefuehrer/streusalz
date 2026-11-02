@@ -75,6 +75,7 @@ export async function buildPdf(document: DocumentRow) {
     write(`Rechnungsbetrag brutto: ${money(line.grossCents)}`, 16, true, 30);
     y -= 10;
     write("Zahlungsziel: 14 Tage nach tatsächlicher Lieferung.", 11, true);
+    if (document.snapshot.paymentWithoutDiscount) write("Zahlbar ohne Abzug. Kein Skonto.", 11, true);
     write("Das konkrete Fälligkeitsdatum folgt mit der Lieferbestätigung. Bitte nicht vom Rechnungsdatum aus berechnen.", 9, false, 15);
     write(`Verwendungszweck: ${document.number}`, 10);
     write(`Bank: ${seller.bankName} | IBAN: ${seller.iban}${seller.bic ? ` | BIC: ${seller.bic}` : ""}`, 10);

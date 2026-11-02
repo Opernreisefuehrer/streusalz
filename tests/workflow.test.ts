@@ -30,6 +30,7 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(order.snapshot.termsText).toBe(legalTexts().terms);
     expect(order.snapshot.privacyText).toBe(legalTexts().privacy);
     expect(order.snapshot.legalVersion).toBe(input.legalVersion);
+    expect(order.snapshot.paymentWithoutDiscount).toBe(true);
     expect((await db.query("SELECT * FROM outbox WHERE order_id=$1", [order.id])).length).toBe(4);
     await expect(releaseInvoices(db, order.id, "admin")).rejects.toThrow("Lieferantenbestätigung");
     await expect(markDelivered(db, order.id, [quote.createdOn], "admin")).rejects.toThrow("Rechnungsfreigabe");
@@ -38,6 +39,7 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(sendMail.mock.calls[3][0].to).toBe("admin@example.invalid");
     expect(sendMail.mock.calls[3][0].text).toContain(`/admin/bestellungen/${order.id}`);
     expect(sendMail.mock.calls[0][0].text).toContain("14 Tage nach tatsächlicher Lieferung");
+    expect(sendMail.mock.calls[0][0].text).toContain("Zahlbar ohne Abzug. Kein Skonto.");
     expect(sendMail.mock.calls[0][0].text).toContain("Gesamt netto inkl. Lieferung:");
     expect(sendMail.mock.calls[0][0].text).not.toMatch(/\n(?:Warenwert|Lieferkosten) netto:/);
     expect(sendMail.mock.calls[0][0].text).toContain(order.snapshot.termsText);
@@ -47,12 +49,14 @@ describe("persistent PostgreSQL order lifecycle", () => {
     await expect(releaseInvoices(db, order.id, "admin")).rejects.toThrow();
     const invoices = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='invoice' ORDER BY participant_index", [order.id]);
     expect(invoices).toHaveLength(3);
+    expect(invoices.every(invoice => invoice.snapshot.paymentWithoutDiscount)).toBe(true);
     expect(new Set(invoices.map(invoice => invoice.number)).size).toBe(3);
     expect(invoices.reduce((sum, invoice) => sum + invoice.snapshot.line.grossCents, 0)).toBe(quote.grossCents);
     const drawText = vi.spyOn(PDFPage.prototype, "drawText");
     const buffer = await buildPdf(invoices[0]);
     const invoiceText = drawText.mock.calls.map(([text]) => text).join("\n");
     expect(invoiceText).toContain("Gesamt netto inkl. Lieferung:");
+    expect(invoiceText).toContain("Zahlbar ohne Abzug. Kein Skonto.");
     expect(invoiceText).not.toMatch(/Lieferkosten netto|Warenwert netto|Einzelpreis netto/);
     drawText.mockRestore();
     expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
@@ -60,12 +64,15 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
     expect(sendMail.mock.calls.at(-1)![0].attachments[0].filename).toMatch(/^R-.*\.pdf$/);
     expect(sendMail.mock.calls.at(-1)![0].text).toContain("Hiermit nehmen wir Ihr Angebot");
+    expect(sendMail.mock.calls.at(-1)![0].text).toContain("Zahlbar ohne Abzug. Kein Skonto.");
     expect(sendMail.mock.calls.at(-1)![0].text).toContain(order.snapshot.termsText);
     await markDelivered(db, order.id, input.participants.map(() => quote.createdOn), "admin");
     expect((await getOrder(db, order.id)).status).toBe("delivered");
     expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
+    expect(sendMail.mock.calls.at(-1)![0].text).toContain("Zahlbar ohne Abzug. Kein Skonto.");
     const notes = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='delivery'", [order.id]);
     expect(notes).toHaveLength(3);
+    expect(notes.every(note => note.snapshot.paymentWithoutDiscount)).toBe(true);
     expect(notes[0].snapshot.invoiceNumber).toMatch(/^R-/);
     await expect(markDelivered(db, order.id, [quote.createdOn], "admin")).rejects.toThrow();
     const filtered = await db.query("SELECT * FROM orders WHERE ($1='' OR status=$1) AND ($2='' OR number ILIKE $3 OR (snapshot->'participants')::text ILIKE $3)", ["delivered", "Winterdienst", "%Winterdienst%"]);
@@ -79,11 +86,13 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
     const [invoice] = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='invoice'", [order.id]);
     delete invoice.snapshot.line.deliveryIncluded;
+    delete invoice.snapshot.paymentWithoutDiscount;
     const drawText = vi.spyOn(PDFPage.prototype, "drawText");
     await buildPdf(invoice);
     const text = drawText.mock.calls.map(([text]) => text).join("\n");
     expect(text).toContain("Warenwert netto:");
     expect(text).toContain("Lieferkosten netto");
+    expect(text).not.toContain("Kein Skonto");
   });
   it("deduplicates retried orders and refuses reuse with changed customer data", async () => {
     const { order: input, quote } = fixture();

@@ -57,8 +57,12 @@ Passwort-Hashing und Anmeldebegrenzung. Ein Passwortwechsel macht alte Sitzungen
   `businessAccepted` gilt fuer beide zugelassenen Kundengruppen.
 - Interne Warenbasis BigBags: 245 €/Tonne netto, ein BigBag pro Tonne.
 - Interne Warenbasis Sackware: 255 €/Tonne netto, 40 Säcke à 25 kg je 1-Tonnen-Palette.
-- Kunden sehen ausschliesslich Gesamtpreise inklusive Lieferung, netto plus 19 % MwSt.
-  und brutto, ohne gesonderte Waren-/Frachtpositionen.
+- Kunden sehen Gesamtpreise inklusive Lieferung, netto plus 19 % MwSt.
+  und brutto, ohne gesonderte Waren-/Frachtpositionen. Die Preisuebersicht zeigt
+  immer auch den Nettopreis pro Tonne, bei Sackware zusaetzlich pro 25-kg-Sack
+  (40 Saecke je Tonne). Einzelpreise werden aus dem Gesamtpreis inklusive Lieferung
+  abgeleitet und auf Cent gerundet; vor dem Preisabruf bleibt eine Eingabeaufforderung
+  statt eines unbelegten Betrags sichtbar.
 - Eine Gebindeart pro Auftrag, nicht mischbar.
 - Gesamtmenge 23, 46, 69 … Tonnen; volle Tonnen je Lieferadresse, maximal drei Adressen.
 - Alle Adressen müssen **untereinander in beiden Richtungen** höchstens 20 Straßenkilometer
@@ -78,7 +82,9 @@ Passwort-Hashing und Anmeldebegrenzung. Ein Passwortwechsel macht alte Sitzungen
   Mo–Fr ohne öffentliche Feiertage des Bundeslandes. Lokale Sonderfeiertage werden
   wie vereinbart bei der Auftragsfreigabe manuell geprüft.
 - Rechnungskauf, Zahlung 14 **Kalendertage nach tatsächlicher Lieferung**.
-  Die Rechnung nennt zunächst diese Bedingung; die Liefermail nennt das konkrete Datum.
+  Zahlung ohne Abzug; kein Skonto. Neue Bestellungen und Dokumente speichern diese
+  Bedingung mit `paymentWithoutDiscount`, damit historische Rechnungen unveraendert
+  bleiben. Die Rechnung nennt zunaechst die Frist; die Liefermail nennt das konkrete Datum.
 
 ### Bestellablauf
 
