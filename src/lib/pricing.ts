@@ -79,9 +79,14 @@ export function acceptedPostcodePrice(token: string, input: PostcodePriceInput) 
 }
 export function proportionalShares(totalCents: number, weights: number[]) {
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-  const shares = weights.map(weight => Math.floor(totalCents * weight / totalWeight));
+  const divisor = BigInt(totalWeight);
+  const parts = weights.map(weight => {
+    const numerator = BigInt(totalCents) * BigInt(weight);
+    return { share: Number(numerator / divisor), fraction: Number(numerator % divisor) };
+  });
+  const shares = parts.map(part => part.share);
   let remainder = totalCents - shares.reduce((sum, share) => sum + share, 0);
-  const ranked = weights.map((weight, index) => ({ index, fraction: totalCents * weight / totalWeight - shares[index] }))
+  const ranked = parts.map((part, index) => ({ index, fraction: part.fraction }))
     .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
   for (const { index } of ranked) {
     if (remainder-- <= 0) break;

@@ -24,6 +24,10 @@ describe("consistent legal content and accurate technical notices", () => {
     expect(text).toContain("Kein Verkauf an Privatkunden");
     expect(text).toContain("Bis zu drei Unternehmen oder öffentliche Auftraggeber");
     expect(text).toContain("öffentliche Auftraggeber ohne Kaufmannseigenschaft");
+    expect(text).toContain("Je Lkw-Ladung (23 t) wird eine Gebindeart gewählt");
+    expect(text).toContain("Beispiel: 23 t BigBags und 23 t 25-kg-Sackware");
+    expect(text).toContain("genau eine 23-Tonnen-Ladung einer Gebindeart teilen");
+    expect(text).not.toContain("nicht innerhalb desselben Auftrags gemischt");
     expect(text).not.toContain("Hinzu kommen die im Bestellabschluss ausgewiesenen Lieferkosten");
     expect(text).not.toContain("Dej");
   });

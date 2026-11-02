@@ -105,6 +105,11 @@ Im Standardablauf liefert `/api/postcode-price` nach Eingabe von Gebinde,
 inklusive Lieferung. Die Antwort enthaelt nur Netto, MwSt., Brutto, die
 Preisauswahl, Gueltigkeitsdaten und einen signierten `postcode-price`-Token,
 keine gesonderten Waren- oder Frachtbetraege.
+Bei mehreren Gebindearten enthaelt die Preisauswahl optional `items` mit
+`product` und `tonnes` je Gebindeart; jede Menge ist ein Vielfaches von 23.
+Die Antwort enthaelt dafuer ebenfalls `items` mit dem jeweiligen Nettopreis
+inklusive Lieferung. Diese Aufteilung wird im signierten Preis mitgebunden
+und unveraendert in die gemeinsame Rechnung und den Lieferschein uebernommen.
 Der Preis gilt 30 Minuten, laengstens bis zum Tageswechsel in Europe/Berlin,
 fuer dieselbe PLZ, Menge und Gebindeart. Strasse und Hausnummer aendern ihn nicht.
 `/api/quote` prueft die vollstaendige Lieferadresse und uebernimmt mit

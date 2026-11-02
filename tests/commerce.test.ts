@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { z } from "zod";
-import { quoteInputSchema, orderInputSchema } from "../src/lib/validation";
+import { quoteInputSchema, orderInputSchema, quoteInputFromOrder, postcodePriceInputSchema } from "../src/lib/validation";
 import { priceQuote, proportionalShares, acceptedQuote } from "../src/lib/pricing";
 import { addWorkingDays, berlinDate, dueDate } from "../src/lib/delivery-date";
 import { signToken, verifyToken } from "../src/lib/tokens";
@@ -25,6 +25,30 @@ describe("B2B quantities and pricing", () => {
     const bags = priceQuote({ ...input, product: "bags" }, { metres: 1500000, states: ["RP"], labels: ["Mainz"] });
     expect(bags.goodsCents).toBe(23 * 25500);
   });
+  it("allows different full-truck products in one order but only one shared truck for communities", () => {
+    const items = [{ product: "bigbag" as const, tonnes: 23 }, { product: "bags" as const, tonnes: 23 }];
+    const { input, order } = fixture([46]);
+    const mixed = { ...input, items };
+    expect(quoteInputSchema.safeParse(mixed).success).toBe(true);
+    expect(quoteInputFromOrder({ ...order, items })).toEqual(mixed);
+    const quote = priceQuote(mixed, { metres: 1500125, states: ["RP"], labels: ["Mainz"] });
+    expect(quote.goodsCents).toBe(23 * 24500 + 23 * 25500);
+    expect(quote.freightCents).toBe(600050);
+    expect(quote.netCents).toBe(1750050);
+    expect(quote.lines).toHaveLength(1);
+    expect(quote.items?.map(item => item.netCents)).toEqual([863525, 886525]);
+    expect(quote.items?.reduce((sum, item) => sum + item.netCents, 0)).toBe(quote.netCents);
+    const shared = fixture([10, 8, 5]).input;
+    expect(quoteInputSchema.safeParse({ ...shared, items }).success).toBe(false);
+    expect(quoteInputSchema.safeParse({ ...shared, deliveries: shared.deliveries.map(delivery => ({ ...delivery, tonnes: delivery.tonnes * 2 })) }).success).toBe(false);
+    for (const badItems of [
+      [{ product: "bigbag", tonnes: 22 }, { product: "bags", tonnes: 24 }],
+      [{ product: "bigbag", tonnes: 23 }, { product: "bigbag", tonnes: 23 }],
+      [{ product: "bigbag", tonnes: 46 }, { product: "bags", tonnes: 23 }],
+    ]) {
+      expect(postcodePriceInputSchema.safeParse({ product: "bigbag", postcode: "65719", tonnes: 46, items: badItems }).success).toBe(false);
+    }
+  });
   it("allows municipalities without VAT IDs and mixed business/public community orders with eligibility confirmation", () => {
     const municipal = fixture().order;
     municipal.participants[0].company = "Gemeinde Musterhausen";
@@ -41,6 +65,9 @@ describe("B2B quantities and pricing", () => {
   });
   it("allocates cents by tonne share, preserving sums on separate invoices including VAT", () => {
     expect(proportionalShares(100, [1, 1, 1])).toEqual([34, 33, 33]);
+    const largeShares = proportionalShares(Number.MAX_SAFE_INTEGER, [23, 46]);
+    expect(largeShares.reduce((sum, value) => sum + value, 0)).toBe(Number.MAX_SAFE_INTEGER);
+    expect(largeShares[0]).toBe(Number((BigInt(Number.MAX_SAFE_INTEGER) + BigInt(1)) / BigInt(3)));
     const { quote } = fixture([10, 8, 5]);
     expect(quote.lines.map(line => line.freightCents)).toEqual(proportionalShares(quote.freightCents, [10, 8, 5]));
     for (const key of ["freightCents", "goodsCents", "netCents", "vatCents", "grossCents"] as const) expect(quote.lines.reduce((sum, line) => sum + line[key], 0)).toBe(quote[key]);

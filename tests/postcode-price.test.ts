@@ -100,6 +100,30 @@ describe("binding postcode prices including delivery", () => {
     await expect(createQuote(changed, initial.token)).rejects.toThrow("PLZ");
     await expect(createQuote(fixture([10, 8, 5]).input, initial.token)).rejects.toThrow("Gemeinschaftsbestellung");
   });
+  it("locks mixed full-truck item prices and their sum through the final quote API", async () => {
+    mockRouting();
+    const items = [{ product: "bigbag" as const, tonnes: 23 }, { product: "bags" as const, tonnes: 23 }];
+    const selected = { ...selection, tonnes: 46, items };
+    const initial = await createPostcodePrice(selected);
+    expect(initial.price.netCents).toBe(1750050);
+    expect(initial.price.items).toEqual([{ ...items[0], netCents: 863525 }, { ...items[1], netCents: 886525 }]);
+    mockRouting([[0, 3000000], [3000000, 0]]);
+    const input = { ...quoteInput(), items, deliveries: [{ ...quoteInput().deliveries[0], tonnes: 46 }] };
+    const response = await quotePOST(new Request("https://www.streusalz-grosshandel.de/api/quote", {
+      method: "POST", headers: { origin: "https://www.streusalz-grosshandel.de", "Content-Type": "application/json" },
+      body: JSON.stringify({ ...input, postcodePriceToken: initial.token }),
+    }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.quote.netCents).toBe(initial.price.netCents);
+    expect(body.quote.items).toEqual(initial.price.items);
+    expect(acceptedQuote(body.token, input).lines).toHaveLength(1);
+    const larger = { ...selected, tonnes: 69, items: [{ product: "bigbag" as const, tonnes: 46 }, { product: "bags" as const, tonnes: 23 }] };
+    const locked = await createPostcodePrice(larger);
+    const swapped = { ...larger, items: [{ product: "bigbag" as const, tonnes: 23 }, { product: "bags" as const, tonnes: 46 }] };
+    expect(() => acceptedPostcodePrice(locked.token, swapped)).toThrow();
+    expect(() => acceptedQuote(body.token, { ...input, items: undefined })).toThrow();
+  });
   it("does not extend postcode price validity during the final address check and rejects next-day prices", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-02T12:00:00Z"));
     mockRouting();

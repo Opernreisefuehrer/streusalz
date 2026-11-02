@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import type { Product, LoadItem } from "../../src/lib/catalog";
 test("homepage preserves the legacy search title, topic and canonical identity", async ({ page, request }) => {
   await page.goto("/");
   const description = "Streusalz für Wege, Einfahrten und Straßen: BigBags und 25-kg-Säcke ab 23 Tonnen. Bundesweite Lieferung auf Rechnung für Gewerbe, Städte und Gemeinden.";
@@ -83,9 +84,13 @@ test("single company is the default and community ordering is an optional specia
   await expect(page.getByRole("heading", { name: "Ihre Bestellgemeinschaft" })).toBeVisible();
   await expect(page.locator(".participant-block")).toHaveCount(2);
   await expect(page.getByLabel("Menge in vollen Tonnen").first()).toHaveAttribute("step", "1");
-  await expect(page.getByLabel("Menge in vollen Tonnen").first()).toHaveValue("22");
+  await expect(page.getByLabel("Menge in vollen Tonnen").first()).toHaveValue("23");
+  await expect(page.getByLabel("Menge in vollen Tonnen").nth(1)).toHaveValue("");
+  await page.getByLabel("Menge in vollen Tonnen").first().fill("22");
+  await page.getByLabel("Menge in vollen Tonnen").nth(1).fill("1");
   await add.click();
   await expect(page.locator(".participant-block")).toHaveCount(3);
+  await expect(page.getByLabel("Menge in vollen Tonnen").nth(2)).toHaveValue("");
   await expect(add).toHaveCount(0);
   await page.getByRole("button", { name: "Entfernen", exact: true }).last().click();
   await page.getByRole("button", { name: "Entfernen", exact: true }).last().click();
@@ -234,7 +239,10 @@ test("community overview shows delivery-inclusive tonne and sack prices after ad
   const sackPrice = summary.locator(".summary-row").filter({ hasText: "Pro 25-kg-Sack netto inkl. Lieferung" });
   await expect(tonnePrice).toContainText("Adressen prüfen");
   await expect(sackPrice).toContainText("Adressen prüfen");
+  let index = 0;
   for (const participant of await page.locator(".participant-block").all()) {
+    await expect(participant.getByLabel("Menge in vollen Tonnen")).toHaveValue("");
+    await participant.getByLabel("Menge in vollen Tonnen").fill(String([10, 8, 5][index++]));
     await participant.getByLabel("Lieferanschrift: Straße und Hausnummer").fill("Teststraße 1");
     await participant.getByLabel("Postleitzahl").fill("55118");
     await participant.getByLabel("Ort", { exact: true }).fill("Mainz");
@@ -244,6 +252,61 @@ test("community overview shows delivery-inclusive tonne and sack prices after ad
   await expect(sackPrice).toContainText("9,64");
   await expect(summary).toContainText("8.865,00");
   await expect(summary).toHaveCSS("background-color", "rgb(237, 247, 239)");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+test("one order supports differently loaded trucks, correct product unit prices and a single invoice recipient", async ({ page }) => {
+  function amounts(input: { product: Product; tonnes: number; items?: LoadItem[] }) {
+    const items = (input.items ?? [{ product: input.product, tonnes: input.tonnes }]).map(item => ({
+      ...item, netCents: item.tonnes * (item.product === "bigbag" ? 24500 : 25500) + 300000 * item.tonnes / 23,
+    }));
+    const netCents = items.reduce((sum, item) => sum + item.netCents, 0), vatCents = Math.round(netCents * .19);
+    return { netCents, vatCents, grossCents: netCents + vatCents, ...(input.items ? { items } : {}) };
+  }
+  const requests: unknown[] = [];
+  let finalRequest: unknown;
+  await page.route("**/api/postcode-price", async route => {
+    const input = route.request().postDataJSON();
+    requests.push(input);
+    await route.fulfill({ json: { price: { input, createdOn: "2026-11-02", validUntil: Date.now() + 1800000, ...amounts(input) }, token: "test-mixed-postcode-price-token" } });
+  });
+  await page.route("**/api/quote", async route => {
+    const input = route.request().postDataJSON();
+    finalRequest = input;
+    const totals = amounts({ ...input, tonnes: input.deliveries[0].tonnes });
+    await route.fulfill({ json: { quote: { ...totals, lines: [{ tonnes: input.deliveries[0].tonnes, grossCents: totals.grossCents, deliveryDate: "2026-11-09", resolvedAddress: "Teststraße 1, 65719 Hofheim" }] }, token: "test-mixed-final-quote-token" } });
+  });
+  await page.goto("/bestellen");
+  await page.getByRole("radio", { name: /Mehrere Gebindearten/ }).check();
+  await expect(page.getByLabel("BigBags: Menge in Tonnen")).toHaveValue("23");
+  await expect(page.getByLabel("25-kg-Sackware: Menge in Tonnen")).toHaveValue("23");
+  await expect(page.locator("form")).toContainText("Beispiel: 23 t BigBags + 23 t 25-kg-Sackware");
+  await expect(page.locator(".participant-block")).toHaveCount(1);
+  await page.getByLabel("Liefer-PLZ", { exact: true }).fill("65719");
+  const summary = page.getByRole("complementary", { name: "Preisübersicht" });
+  await expect(summary).toContainText("17.500,00");
+  await expect(summary.locator(".summary-row").filter({ hasText: "23 t BigBags · pro Tonne" })).toContainText("375,43");
+  await expect(summary.locator(".summary-row").filter({ hasText: "23 t 25-kg-Sackware · pro Tonne" })).toContainText("385,43");
+  await expect(summary.locator(".summary-row").filter({ hasText: "Pro 25-kg-Sack" })).toContainText("9,64");
+  expect(requests[0]).toMatchObject({ tonnes: 46, items: [{ product: "bigbag", tonnes: 23 }, { product: "bags", tonnes: 23 }] });
+  await page.getByLabel("Lieferanschrift: Straße und Hausnummer").fill("Teststraße 1");
+  await page.getByLabel("Ort", { exact: true }).fill("Hofheim");
+  await page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ }).click();
+  await expect(summary).toContainText("Teststraße 1, 65719 Hofheim");
+  expect(finalRequest).toMatchObject({ items: [{ product: "bigbag", tonnes: 23 }, { product: "bags", tonnes: 23 }], deliveries: [{ tonnes: 46 }], postcodePriceToken: "test-mixed-postcode-price-token" });
+  await page.getByLabel("25-kg-Sackware: Menge in Tonnen").fill("46");
+  await expect(summary).toContainText("26.365,00");
+  await expect(summary).not.toContainText("Teststraße 1, 65719 Hofheim");
+  await page.getByLabel("25-kg-Sackware: Menge in Tonnen").fill("24");
+  await expect(page.locator('.message-error[role="alert"]')).toContainText("Je Gebindeart sind volle 23-Tonnen-Ladungen erforderlich");
+  await expect(summary).not.toHaveClass(/price-success/);
+  await page.getByLabel("25-kg-Sackware: Menge in Tonnen").fill("23");
+  await expect(summary).toContainText("17.500,00");
+  await page.getByText("Sonderfall: Gemeinschaftsbestellung mit weiteren Auftraggebern", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "+ Weiteren Auftraggeber hinzufügen", exact: true })).toBeDisabled();
+  await page.getByRole("radio", { name: /BigBags/ }).check();
+  await expect(summary).toContainText("17.270,00");
+  await expect(summary.getByText("Pro 25-kg-Sack netto inkl. Lieferung", { exact: true })).toHaveCount(0);
+  expect(requests.at(-1)).not.toHaveProperty("items");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 test("postcode price errors are visible next to the postcode form", async ({ page }) => {
