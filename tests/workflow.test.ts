@@ -61,6 +61,10 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(sendMail.mock.calls[3][0].text).toContain(`/admin/bestellungen/${order.id}`);
     expect(sendMail.mock.calls[0][0].text).toContain("14 Tage nach tatsächlicher Lieferung");
     expect(sendMail.mock.calls[0][0].text).toContain("Zahlbar ohne Abzug. Kein Skonto.");
+    expect(sendMail.mock.calls[0][0].text).toContain("Wir stimmen die Lieferung mit Ihnen ab.");
+    expect(sendMail.mock.calls[0][0].text).toContain("Auftragsbestätigung und Rechnung per E-Mail");
+    expect(sendMail.mock.calls[0][0].text).not.toContain("manuell freigegeben");
+    expect(sendMail.mock.calls[0][0].text).not.toContain("Wir bestellen beziehungsweise disponieren");
     expect(sendMail.mock.calls[0][0].text).toContain("Gesamt netto inkl. Lieferung:");
     expect(sendMail.mock.calls[0][0].text).not.toContain("01523-6183155");
     expect(sendMail.mock.calls[0][0].text).not.toMatch(/\bundefined\b/);

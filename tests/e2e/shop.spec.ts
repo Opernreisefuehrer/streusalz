@@ -198,6 +198,10 @@ test("postcode all-in price appears automatically and is preserved during addres
   await expect(summary).toContainText("8.635,00");
   await page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ }).click();
   await expect(summary).toContainText("Teststraße 1, 55118 Mainz");
+  const confirmed = page.getByRole("status").filter({ hasText: "Lieferadresse bestätigt." });
+  await expect(confirmed).toContainText("Sie können jetzt bestellen.");
+  await expect(confirmed).toHaveCSS("background-color", "rgb(237, 247, 239)");
+  await expect(page.locator('.message-error[role="alert"]')).toHaveCount(0);
   await expect(summary).toHaveCSS("background-color", "rgb(237, 247, 239)");
   await expect(tonnePrice).toContainText("375,43");
   expect(finalRequest).toMatchObject({ postcodePriceToken: "test-postcode-price-token", deliveries: [{ tonnes: 23, address: { street: "Teststraße 1", postcode: "55118", city: "Mainz" } }] });
@@ -243,6 +247,23 @@ test("postcode all-in prices are invalidated and fetched again when quantity, pr
   await expect(tonnePrice).toBeVisible();
   await expect(summary.getByText("Pro 25-kg-Sack netto inkl. Lieferung", { exact: true })).toHaveCount(0);
 });
+test("receipt explains customer delivery coordination without exposing internal procurement", async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem("streusalz-receipt", JSON.stringify({ number: "B-2026-123456", mailPending: false })));
+  await page.goto("/danke");
+  await expect(page.locator("main ol li")).toHaveText([
+    "Wir stimmen die Lieferung mit Ihnen ab.",
+    "Anschließend erhalten Sie Ihre Auftragsbestätigung und Rechnung per E-Mail.",
+    "Nach der Lieferung erhalten Sie Ihren Lieferschein per E-Mail.",
+    "Ihre Zahlung ist 14 Tage nach tatsächlicher Lieferung fällig.",
+  ]);
+  await expect(page.locator("main")).not.toContainText(/Lieferant|manuell/);
+  await page.goto("/");
+  await expect(page.locator("#ablauf")).toContainText("Wir stimmen die Lieferung mit Ihnen ab.");
+  await expect(page.locator("#ablauf")).not.toContainText(/Lieferant|manuell/);
+  await page.goto("/bestellen");
+  await expect(page.locator("form")).toContainText("Auftragsbestätigung und Rechnung per E-Mail");
+  await expect(page.locator("form")).not.toContainText(/Lieferant|manuell/);
+});
 test("community overview shows delivery-inclusive tonne and sack prices after address confirmation", async ({ page }) => {
   await page.route("**/api/quote", async route => {
     const { deliveries } = route.request().postDataJSON();
@@ -276,6 +297,7 @@ test("community overview shows delivery-inclusive tonne and sack prices after ad
   await expect(tonnePrice).toContainText("385,43");
   await expect(sackPrice).toContainText("9,64");
   await expect(summary).toContainText("8.865,00");
+  await expect(page.getByRole("status").filter({ hasText: "Lieferadressen bestätigt." })).toHaveCSS("background-color", "rgb(237, 247, 239)");
   await expect(summary).toHaveCSS("background-color", "rgb(237, 247, 239)");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

@@ -18,6 +18,8 @@ describe("consistent legal content and accurate technical notices", () => {
     expect(text).toContain("Kunde organisiert die geeignete und sichere Entladung");
     expect(text).toContain("Eingang der Bestellung");
     expect(text).toContain("ausdrückliche Auftragsannahme");
+    expect(text).toContain("Wir stimmen die Lieferung mit Ihnen ab.");
+    expect(text).not.toContain("Wir bestellen beziehungsweise disponieren die Ware beim Lieferanten");
     expect(text).toContain("Straße und Hausnummer innerhalb derselben Liefer-PLZ verändern diesen Preis nicht");
     expect(text).toContain("keine zusätzlichen Lieferkosten");
     expect(text).toContain("öffentliche Auftraggeber, insbesondere Städte, Gemeinden und kommunale Einrichtungen");

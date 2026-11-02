@@ -182,6 +182,11 @@ Danke-Mails nennen ebenfalls nur den Gesamtpreis inklusive Lieferung.
 Ausgestellte Dokumentdaten sind unveränderliche Snapshots. Die Verwaltung bietet PDF-Downloads,
 Suche, Statusfilter, Pagination und ein Auftragsprotokoll. Stornierung, Gutschriften,
 Buchhaltungsexport, Zahlungsabgleich und Lieferanten-API sind nicht implementiert.
+
+Kundentexte beschreiben Lieferabstimmung, anschliessende Auftragsbestaetigung
+mit Rechnung sowie Lieferschein und Zahlungsziel nach Lieferung. Beschaffung
+und manuelle Rechnungsfreigabe bleiben interne Verwaltungsablaeufe. Die erste
+Eingangsbestaetigung ist weiterhin keine Auftragsannahme.
 Ein erzeugter Lieferschein ist **keine unterschriebene Empfangsquittung**.
 
 ## E-Mail und Zuverlässigkeit
