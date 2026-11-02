@@ -234,6 +234,39 @@ test("postcode all-in price appears automatically and is preserved during addres
   await expect(terms).not.toBeChecked();
   expect(submittedOrders).toEqual([]);
 });
+test("unrouteable postcodes offer a personal quote without fake prices and recover when the postcode changes", async ({ page }) => {
+  const orders: string[] = [];
+  page.on("request", request => { if (request.url().endsWith("/api/orders")) orders.push(request.url()); });
+  await page.route("**/api/postcode-price", async route => {
+    const input = route.request().postDataJSON();
+    if (input.postcode === "27498") {
+      await route.fulfill({ status: 422, json: { error: "Gerne prüfen wir die Lieferung persönlich und erstellen Ihnen ein individuelles Lieferangebot.", code: "manual_quote_required" } });
+      return;
+    }
+    await route.fulfill({ json: { price: { input, createdOn: "2026-11-02", validUntil: Date.now() + 1800000, netCents: 849558, vatCents: 161416, grossCents: 1010974 }, token: "test-price" } });
+  });
+  await page.goto("/bestellen");
+  await page.getByLabel("Liefer-PLZ", { exact: true }).fill("27498");
+  const notice = page.getByRole("status").filter({ hasText: "Ihr persönliches Lieferangebot" });
+  await expect(notice).toBeVisible();
+  const link = notice.getByRole("link", { name: "Persönliches Lieferangebot anfragen" });
+  const href = await link.getAttribute("href");
+  if (!href) throw new Error("Personal-offer email link is missing.");
+  const mailto = new URL(href);
+  expect(mailto.protocol).toBe("mailto:");
+  expect(mailto.pathname).toBe("info@streusalz-grosshandel.de");
+  expect(mailto.searchParams.get("subject")).toContain("27498");
+  expect(mailto.searchParams.get("body")).toContain("23 Tonnen nach PLZ 27498");
+  await expect(page.locator("main [role='alert']")).toHaveCount(0);
+  const summary = page.getByRole("complementary", { name: "Preisübersicht" });
+  await expect(summary.getByRole("button", { name: "Jetzt bestellen", exact: true })).toHaveCount(0);
+  await expect(summary).not.toHaveClass(/price-success/);
+  await page.getByLabel("Liefer-PLZ", { exact: true }).fill("36381");
+  await expect(notice).toHaveCount(0);
+  await expect(summary).toContainText("8.495,58");
+  await expect(summary.getByRole("button", { name: "Jetzt bestellen", exact: true })).toBeVisible();
+  expect(orders).toEqual([]);
+});
 test("postcode all-in prices are invalidated and fetched again when quantity, product or postcode changes", async ({ page }) => {
   const requests: unknown[] = [];
   await page.route("**/api/postcode-price", async route => {

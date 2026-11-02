@@ -6,9 +6,20 @@ import { useRouter } from "next/navigation";
 import { PRODUCTS, money, displayDate, productLabel, type Product, type LoadItem } from "@/lib/catalog";
 import { quoteInputSchema, type Participant } from "@/lib/validation";
 import type { PostcodePrice, Quote } from "@/lib/pricing";
+import { AppError } from "@/lib/errors";
 
 const emptyAddress = () => ({ street: "", postcode: "", city: "" });
 const emptyParticipant = (tonnes: number): Participant => ({ company: "", contact: "", email: "", phone: "", vatId: "", tonnes, address: emptyAddress(), billingAddress: emptyAddress() });
+function responseIssue(data: { error?: unknown; code?: unknown }, fallback: string, status: number) {
+  return new AppError(typeof data.error === "string" ? data.error : fallback, status, data.code === "manual_quote_required" ? data.code : undefined);
+}
+function CheckoutNotice({ issue, enquiryHref }: { issue: Error; enquiryHref: string }) {
+  const manual = issue instanceof AppError && issue.code === "manual_quote_required";
+  return <div className={`message ${manual ? "message-info" : "message-error"}`} role={manual ? "status" : "alert"}>
+    {manual && <><b>Ihr persönliches Lieferangebot</b><br /></>}{issue.message}
+    {manual && <p><a className="button button-secondary" href={enquiryHref}>Persönliches Lieferangebot anfragen</a></p>}
+  </div>;
+}
 export function Checkout({ initialProduct, community, enabled, legalVersion }: { initialProduct: Product; community: boolean; enabled: boolean; legalVersion: string }) {
   const [product, setProduct] = useState<Product>(initialProduct);
   const [loadItems, setLoadItems] = useState<LoadItem[]>();
@@ -16,11 +27,11 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
   const [separateBilling, setSeparateBilling] = useState<boolean[]>(community ? [false, false, false] : [false]);
   const [quote, setQuote] = useState<{ quote: Quote; token: string } | null>(null);
   const [postcodePrice, setPostcodePrice] = useState<{ price: PostcodePrice; token: string } | null>(null);
-  const [priceError, setPriceError] = useState("");
+  const [priceError, setPriceError] = useState<Error | null>(null);
   const [pricingBusy, setPricingBusy] = useState(false);
   const [priceRefresh, setPriceRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<Error | null>(null);
   const requestId = useRef<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
@@ -32,6 +43,7 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
   const sackPrice = currentPrice?.items?.find(item => item.product === "bags") ?? (product === "bags" && !loadItems && currentPrice ? { tonnes: total, netCents: currentPrice.netCents } : undefined);
   const priceInput = JSON.stringify({ product, postcode, tonnes: total, ...(loadItems ? { items: loadItems } : {}) });
   const canPrice = !isCommunity && validTotal && /^\d{5}$/.test(postcode);
+  const enquiryHref = `mailto:info@streusalz-grosshandel.de?subject=${encodeURIComponent(`Lieferangebot für PLZ ${postcode}`)}&body=${encodeURIComponent(`Guten Tag,\n\nbitte prüfen Sie die Lieferung und erstellen Sie mir ein persönliches Angebot:\n\nGebinde: ${productLabel(product, loadItems)}\n${participants.map(participant => `${participant.tonnes} Tonnen nach PLZ ${participant.address.postcode}`).join("\n")}\n\nVielen Dank.`)}`;
   useEffect(() => {
     if (!canPrice) return;
     const controller = new AbortController();
@@ -43,10 +55,10 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
           body: priceInput, signal: controller.signal,
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Der aktuelle Preis konnte nicht berechnet werden.");
-        if (!controller.signal.aborted) { setPostcodePrice(data); setPriceError(""); }
+        if (!response.ok) throw responseIssue(data, "Der aktuelle Preis konnte nicht berechnet werden.", response.status);
+        if (!controller.signal.aborted) { setPostcodePrice(data); setPriceError(null); }
       } catch (error) {
-        if (!controller.signal.aborted) setPriceError(error instanceof Error ? error.message : "Der Preisservice ist nicht erreichbar.");
+        if (!controller.signal.aborted) setPriceError(error instanceof Error ? error : new Error("Der Preisservice ist nicht erreichbar."));
       } finally {
         if (!controller.signal.aborted) setPricingBusy(false);
       }
@@ -58,23 +70,24 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
     if (recalculate) {
       setQuote(null);
       if ((changes.tonnes !== undefined && changes.tonnes !== participants[index].tonnes) || (changes.address && changes.address.postcode !== participants[index].address.postcode)) {
-        setPostcodePrice(null); setPriceError(""); setPricingBusy(false);
+        setPostcodePrice(null); setPriceError(null); setPricingBusy(false);
       }
     }
     requestId.current = null;
+    setError(null);
   }
   function addParticipant() {
     if (participants.length >= 3 || loadItems) return;
     setParticipants(current => [...current, emptyParticipant(0)]);
     setSeparateBilling(current => [...current, false]);
-    setQuote(null); setPostcodePrice(null); setPriceError(""); setPricingBusy(false); requestId.current = null;
+    setQuote(null); setPostcodePrice(null); setPriceError(null); setError(null); setPricingBusy(false); requestId.current = null;
   }
   function configureLoads(items: LoadItem[]) {
     const selected = items.filter(item => item.tonnes !== 0);
     setLoadItems(selected.length > 1 ? selected : undefined);
     if (selected.length) setProduct(selected[0].product);
     update(0, { tonnes: selected.reduce((sum, item) => sum + item.tonnes, 0) }, true);
-    setQuote(null); setPostcodePrice(null); setPriceError(""); setPricingBusy(false);
+    setQuote(null); setPostcodePrice(null); setPriceError(null); setPricingBusy(false);
   }
   function tonnesFor(key: Product) {
     return loadItems?.find(item => item.product === key)?.tonnes ?? (!loadItems && product === key ? total : 0);
@@ -82,7 +95,7 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
   function removeParticipant(index: number) {
     setParticipants(current => current.filter((_, i) => i !== index).map((participant, i) => i === 0 ? { ...participant, tonnes: participant.tonnes + current[index].tonnes } : participant));
     setSeparateBilling(current => current.filter((_, i) => i !== index));
-    setQuote(null); setPostcodePrice(null); setPriceError(""); setPricingBusy(false); requestId.current = null;
+    setQuote(null); setPostcodePrice(null); setPriceError(null); setError(null); setPricingBusy(false); requestId.current = null;
   }
   function continueOrder() {
     const form = formRef.current;
@@ -96,22 +109,22 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
     target?.scrollIntoView({ block: "center" });
   }
   async function calculate() {
-    setError(""); setQuote(null);
+    setError(null); setQuote(null);
     const input = quoteInputSchema.safeParse({ product, ...(loadItems ? { items: loadItems } : {}), deliveries: participants.map(({ tonnes, address }) => ({ tonnes, address })) });
-    if (!input.success) { setError(input.error.issues[0].message); return; }
+    if (!input.success) { setError(new Error(input.error.issues[0].message)); return; }
     setBusy(true);
     try {
       const response = await fetch("/api/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input.data, ...(!isCommunity && postcodePrice ? { postcodePriceToken: postcodePrice.token } : {}) }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Der Gesamtpreis konnte nicht bestätigt werden.");
+      if (!response.ok) throw responseIssue(data, "Der Gesamtpreis konnte nicht bestätigt werden.", response.status);
       setQuote(data);
-    } catch (error) { setError(error instanceof Error ? error.message : "Der Preisservice ist nicht erreichbar."); }
+    } catch (error) { setError(error instanceof Error ? error : new Error("Der Preisservice ist nicht erreichbar.")); }
     finally { setBusy(false); }
   }
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!quote || !enabled) return;
-    setError(""); setBusy(true);
+    setError(null); setBusy(true);
     const data = new FormData(event.currentTarget);
     try {
       const customers = participants.map((participant, index) => ({ ...participant, billingAddress: separateBilling[index] ? participant.billingAddress : participant.address }));
@@ -137,7 +150,7 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
       sessionStorage.setItem("streusalz-receipt", JSON.stringify({ number: result.number, mailPending: result.mailPending }));
       sessionStorage.removeItem("streusalz-pending-request");
       router.push("/danke");
-    } catch (error) { setError(error instanceof Error ? error.message : "Keine Verbindung. Bitte versuchen Sie es erneut. Dieselbe Anfrage wird nicht doppelt bestellt."); }
+    } catch (error) { setError(error instanceof Error ? error : new Error("Keine Verbindung. Bitte versuchen Sie es erneut. Dieselbe Anfrage wird nicht doppelt bestellt.")); }
     finally { setBusy(false); }
   }
   const addressFields = (index: number, billing: boolean) => {
@@ -151,18 +164,18 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
   };
   return <div className="container checkout-layout"><form ref={formRef} onSubmit={submit}>
     <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-      <section className="panel"><p className="eyebrow">01 · MENGE & PREIS</p><h2>Was benötigen Sie?</h2><p>{isCommunity ? "Wählen Sie eine Gebindeart für die gemeinsame 23-Tonnen-Ladung." : "Wählen Sie je Gebindeart die Anzahl der 23-Tonnen-Ladungen. Mit 0 wählen Sie eine Gebindeart ab."}</p><div className="product-options">{(Object.keys(PRODUCTS) as Product[]).map(key => isCommunity ? <label className="product-option" key={key}><input type="radio" name="product" value={key} checked={product === key} onChange={() => { setProduct(key); setLoadItems(undefined); setQuote(null); setPostcodePrice(null); setPriceError(""); setPricingBusy(false); requestId.current = null; }} /><b>{PRODUCTS[key].shortName}</b><span>{PRODUCTS[key].unit}</span><strong>Preis inkl. Lieferung</strong></label> : <label className={`product-option field${tonnesFor(key) > 0 ? " product-option-selected" : ""}`} key={key}><b>{PRODUCTS[key].shortName}</b><span>{PRODUCTS[key].unit} · 23 t je Ladung</span><span>Anzahl</span><input aria-label={`${PRODUCTS[key].shortName}: Anzahl der 23-t-Ladungen`} required type="number" min={0} step={1} value={tonnesFor(key) / 23} onChange={event => configureLoads((Object.keys(PRODUCTS) as Product[]).map(current => ({ product: current, tonnes: current === key ? Number(event.target.value) * 23 : tonnesFor(current) })))} /><span className="field-help">{tonnesFor(key)} t · {key === "bags" ? `${tonnesFor(key)} Paletten · ${tonnesFor(key) * 40} Säcke` : `${tonnesFor(key)} BigBags`}</span></label>)}</div>
+      <section className="panel"><p className="eyebrow">01 · MENGE & PREIS</p><h2>Was benötigen Sie?</h2><p>{isCommunity ? "Wählen Sie eine Gebindeart für die gemeinsame 23-Tonnen-Ladung." : "Wählen Sie je Gebindeart die Anzahl der 23-Tonnen-Ladungen. Mit 0 wählen Sie eine Gebindeart ab."}</p><div className="product-options">{(Object.keys(PRODUCTS) as Product[]).map(key => isCommunity ? <label className="product-option" key={key}><input type="radio" name="product" value={key} checked={product === key} onChange={() => { setProduct(key); setLoadItems(undefined); setQuote(null); setPostcodePrice(null); setPriceError(null); setError(null); setPricingBusy(false); requestId.current = null; }} /><b>{PRODUCTS[key].shortName}</b><span>{PRODUCTS[key].unit}</span><strong>Preis inkl. Lieferung</strong></label> : <label className={`product-option field${tonnesFor(key) > 0 ? " product-option-selected" : ""}`} key={key}><b>{PRODUCTS[key].shortName}</b><span>{PRODUCTS[key].unit} · 23 t je Ladung</span><span>Anzahl</span><input aria-label={`${PRODUCTS[key].shortName}: Anzahl der 23-t-Ladungen`} required type="number" min={0} step={1} value={tonnesFor(key) / 23} onChange={event => configureLoads((Object.keys(PRODUCTS) as Product[]).map(current => ({ product: current, tonnes: current === key ? Number(event.target.value) * 23 : tonnesFor(current) })))} /><span className="field-help">{tonnesFor(key)} t · {key === "bags" ? `${tonnesFor(key)} Paletten · ${tonnesFor(key) * 40} Säcke` : `${tonnesFor(key)} BigBags`}</span></label>)}</div>
         {!isCommunity && <>
           <div className="field-grid">
             <label className="field">Menge in Tonnen<input aria-label="Menge in Tonnen" readOnly value={total} aria-describedby="load-quantity-help" /><span className="field-help" id="load-quantity-help">Gesamtmenge aus Ihrer Auswahl · 23 t je Lkw-Ladung</span></label>
             <label className="field">Liefer-PLZ<input id="liefer-plz" inputMode="numeric" pattern="[0-9]{5}" maxLength={5} autoComplete="shipping postal-code" value={postcode} onChange={event => update(0, { address: { ...participants[0].address, postcode: event.target.value } }, true)} /></label>
           </div>
           {loadItems && <p className="fine-print">Beispiel: 23 t BigBags + 23 t 25-kg-Sackware = 46 t in einer Bestellung, geliefert mit zwei Lkw. Sie erhalten eine gemeinsame Rechnung.</p>}
-          <button type="button" className="button full-width" disabled={!validTotal || !/^\d{5}$/.test(postcode) || pricingBusy} onClick={() => { setQuote(null); setPostcodePrice(null); setPriceError(""); setPriceRefresh(current => current + 1); }}>Aktuellen Preis anzeigen ↗</button>
+          <button type="button" className="button full-width" disabled={!validTotal || !/^\d{5}$/.test(postcode) || pricingBusy} onClick={() => { setQuote(null); setPostcodePrice(null); setPriceError(null); setPriceRefresh(current => current + 1); }}>Aktuellen Preis anzeigen ↗</button>
           <p className="fine-print">PLZ eingeben – Ihr aktueller Preis inklusive Lieferung erscheint automatisch. Der Preis gilt für die gewählte Menge und Gebindeart 30 Minuten, längstens bis zum Tageswechsel. Straße und Hausnummer innerhalb derselben PLZ ändern ihn nicht. PLZ-Koordinaten: <a href="https://www.geonames.org/" target="_blank" rel="noopener noreferrer">GeoNames</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>).</p>
           {pricingBusy && <p role="status">Ihr aktueller Preis wird berechnet …</p>}
           {postcodePrice && <div className="message message-success price-success" role="status"><b>Aktueller Preis inkl. Lieferung: {money(postcodePrice.price.netCents)} netto</b><br />Gesamtpreis für {total} Tonnen nach {postcode}, zzgl. 19 % MwSt.</div>}
-          {priceError && <div className="message message-error" role="alert">{priceError}</div>}
+          {priceError && <CheckoutNotice issue={priceError} enquiryHref={enquiryHref} />}
         </>}
         <div className="summary-row"><span>Gesamtmenge</span><strong>{total} Tonnen · {validTotal ? `${total / 23} Lkw-Ladung${total === 23 ? "" : "en"}` : "Menge prüfen"}</strong></div>
         {!validTotal && <div className="message message-error" role="alert">{isCommunity ? <>Eine Gemeinschaftsbestellung teilt genau 23 Tonnen einer Gebindeart. Bitte unten bei jedem Auftraggeber die Teilmenge im Feld „Menge in vollen Tonnen“ eintragen. <a href="#teilmenge-0" className="text-link">Zur Mengeneingabe ↓</a></> : "Je Gebindeart sind volle 23-Tonnen-Ladungen erforderlich: 23, 46, 69 … Tonnen. Bitte Ihre Bestellmenge anpassen."}</div>}
@@ -200,7 +213,7 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
       </section>
     </fieldset>
     {busy && <p className="loading-label" role="status">Ihre Anfrage wird verarbeitet. Bitte warten …</p>}
-    {error && <div className="message message-error" role="alert">{error}</div>}
+    {error && <CheckoutNotice issue={error} enquiryHref={enquiryHref} />}
   </form><aside className={`panel quote-summary${currentPrice ? " message-success price-success" : ""}`} aria-label="Preisübersicht" aria-live="polite"><p className="eyebrow">ALLES AUF EINEN BLICK</p><h2>Aktueller Preis inkl. Lieferung</h2><div className="summary-row"><span>Gebinde</span><b>{productLabel(product, loadItems)}</b></div><div className="summary-row"><span>Gesamtmenge</span><b>{total} t</b></div><div className="summary-row"><span>{isCommunity ? "Lieferadressen / Rechnungen" : "Lieferadresse / Rechnung"}</span><b>{participants.length}</b></div>
     <div className="summary-row"><span>Pro Tonne netto inkl. Lieferung{loadItems && " (Durchschnitt)"}</span><b>{currentPrice ? money(currentPrice.netCents / total) : isCommunity ? "Adressen prüfen" : "PLZ eingeben"}</b></div>
     {loadItems?.map(item => { const priced = currentPrice?.items?.find(entry => entry.product === item.product); return <div className="summary-row" key={item.product}><span>{item.tonnes} t {PRODUCTS[item.product].shortName} · pro Tonne netto inkl. Lieferung</span><b>{priced ? money(priced.netCents / priced.tonnes) : "PLZ eingeben"}</b></div>; })}

@@ -176,6 +176,19 @@ Quelle: [GeoNames Deutschland-Postleitzahlen](https://download.geonames.org/expo
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 Die abgeleitete Tabelle enthaelt je PLZ den ersten Ortspunkt mit der hoechsten
 in der Quelldatei angegebenen Genauigkeit, nicht die genaue Kundenanschrift.
+Die PLZ-Preisberechnung verwendet direkt eine echte gerichtete HGV-Directionsroute,
+nicht das separate Matrixkontingent. Nur der ungefaehre PLZ-Zielpunkt darf
+innerhalb von maximal 5.000 Metern an eine Lkw-befahrbare Strasse angebunden
+werden; der interne Startpunkt behaelt 350 Meter. So scheitern laendliche
+PLZ-Ortspunkte nicht am normalen 350-Meter-Suchradius. Exakte Lieferadressen
+und die beidseitige 20-km-Grenze fuer Gemeinschaften werden nicht aufgeweicht.
+Kann der Anbieter fuer ein Ziel keine Route oder Strassenanbindung finden
+(Directions 2009/2010, Matrix 6010 oder nicht erreichbare Matrix-Ziele), bietet
+der Checkout ein persoenliches Lieferangebot per E-Mail an. Die Antwort enthaelt
+`code: "manual_quote_required"` und keinen erfundenen Preis oder Bestelltoken.
+Die E-Mail wird mit Gebinde, Tonnen und Liefer-PLZ vorbereitet, aber erst durch
+den Kunden versendet. Echte Kontingent-, Verbindungs- und Serverfehler bleiben
+davon getrennte, sichtbare Servicefehler. Es wird keine PLZ pauschal gesperrt.
 Die Namensnennung steht auch direkt am PLZ-Rechner. Es findet keine Anfrage
 an GeoNames beim Seitenaufruf oder bei der Berechnung statt.
 Zur Aktualisierung DE.zip herunterladen, DE.txt entpacken und
@@ -423,5 +436,12 @@ Wenn Playwright einen fehlenden Browser meldet: `npx playwright install chromium
 Geschäftsabläufe werden gegen eine echte PGlite/PostgreSQL-Engine getestet, PDFs tatsächlich
 erzeugt und geladen. Routing/SMTP werden in Tests isoliert simuliert; produktive Schlüssel,
 echte Straßendistanzen und Zustellung müssen zusätzlich mit den realen Anbietern geprüft werden.
+Der PLZ-Preistest durchlaeuft alle gebuendelten PLZ mit BigBags, Sackware,
+zwei Ladungen und einer Mischbestellung: Koordinaten, begrenztes Road-Snapping,
+Centbetraege, MwSt. und signierte Preise werden vollstaendig geprueft.
+Diese Vollpruefung verwendet ausdruecklich simulierte Routen. Sie ersetzt
+keinen Live-Routentest aller Zielpunkte. Ein solcher Test muss das verfuegbare
+Anbieterkontingent und dessen Rate-Limits beachten, ohne das fuer Kunden
+benoetigte Kontingent zu erschoepfen oder den Shop-Anfrageschutz aufzuweichen.
 Browsertests prüfen Desktop und Mobil, Mengenregeln, Navigation, Vorschau-Indexierung
 und Adminschutz. Sie führen keine echten Käufe aus.

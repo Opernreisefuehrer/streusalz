@@ -29,6 +29,9 @@ class RoutingServiceError extends AppError {
     super("Der Adress- oder Routenservice ist derzeit nicht verfügbar. Dies bedeutet nicht, dass Ihre Adresse falsch ist. Bitte versuchen Sie es später erneut oder kontaktieren Sie uns per E-Mail.", 503);
   }
 }
+function manualQuoteRequired() {
+  return new AppError("Für dieses Lieferziel konnte keine befahrbare Lkw-Strecke automatisch ermittelt werden. Gerne prüfen wir die Lieferung persönlich und erstellen Ihnen ein individuelles Lieferangebot.", 422, "manual_quote_required");
+}
 async function routingRequest(path: string, body?: unknown) {
   const key = process.env.ORS_API_KEY;
   if (!key) throw new AppError("Die Preisberechnung ist noch nicht eingerichtet. Bitte fragen Sie Ihren Gesamtpreis inklusive Lieferung per E-Mail an.", 503);
@@ -47,8 +50,18 @@ async function routingRequest(path: string, body?: unknown) {
     throw new RoutingServiceError(true);
   }
   if (!response.ok) {
-    const body = await response.text();
-    console.error("Routing service HTTP failure", { status: response.status, service: path.split("?")[0], response: body.slice(0, 1000).replaceAll(key, "[redacted]") });
+    const errorBody = await response.text();
+    console.error("Routing service HTTP failure", { status: response.status, service: path.split("?")[0], response: errorBody.slice(0, 1000).replaceAll(key, "[redacted]") });
+    if (response.status === 404 && (path.startsWith("v2/directions/") || path.startsWith("v2/matrix/"))) {
+      let details: unknown;
+      try { details = JSON.parse(errorBody); }
+      catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        throw new RoutingServiceError(false);
+      }
+      const parsed = z.object({ error: z.object({ code: z.number() }) }).safeParse(details);
+      if (parsed.success && (path.startsWith("v2/directions/") ? [2009, 2010] : [6010]).includes(parsed.data.error.code)) throw manualQuoteRequired();
+    }
     throw new RoutingServiceError(response.status === 403 || response.status === 429 || response.status >= 500);
   }
   return response.json() as Promise<unknown>;
@@ -70,7 +83,7 @@ async function roadDistances(coordinates: number[][]) {
   }
   return matrix.data.distances;
 }
-async function directionsDistances(coordinates: number[][]) {
+async function directionsDistances(coordinates: number[][], radiuses?: number[]) {
   const distances: (number | null)[][] = coordinates.map((_, i) => coordinates.map((_, j) => i === j ? 0 : null));
   const legs: Promise<void>[] = [];
   for (let from = 0; from < coordinates.length; from++) {
@@ -82,6 +95,7 @@ async function directionsDistances(coordinates: number[][]) {
         }).safeParse(await routingRequest("v2/directions/driving-hgv/json", {
           coordinates: [coordinates[from], coordinates[to]], preference: "recommended", units: "m",
           geometry: false, instructions: false,
+          ...(radiuses ? { radiuses: [radiuses[from], radiuses[to]] } : {}),
         }));
         if (!parsed.success) throw new AppError("Der Routenservice hat eine ungültige Antwort geliefert.", 503);
         distances[from][to] = parsed.data.routes[0].summary.distance;
@@ -95,7 +109,8 @@ export async function calculatePostcodeDistance(postcode: string) {
   postcode = postcodeSchema.parse(postcode);
   const coordinates = postcodeCoordinates[postcode];
   if (!coordinates) throw new AppError("Für diese Liefer-PLZ liegen noch keine Koordinaten vor. Bitte prüfen Sie die PLZ oder kontaktieren Sie uns für Ihren Preis inklusive Lieferung.");
-  const distances = await roadDistances([dispatchCoordinates, coordinates]);
+  // Approximate postcode points may be off-road; only their endpoint gets a wider, bounded search.
+  const distances = await directionsDistances([dispatchCoordinates, coordinates], [350, 5000]);
   const metres = distances[0][1];
   if (metres === null || !Number.isFinite(metres) || metres <= 0) throw new AppError("Für diese Postleitzahl wurde keine befahrbare Lkw-Strecke gefunden.");
   return metres;
@@ -151,7 +166,7 @@ export async function calculateRoute(input: QuoteInput) {
     for (let j = 1; j < coordinates.length; j++) {
       if (i === j) continue;
       const metres = distances[i][j];
-      if (metres === null) throw new AppError("Zwischen den Lieferadressen wurde keine befahrbare Lkw-Strecke gefunden.");
+      if (metres === null) throw manualQuoteRequired();
       if (metres > 20000) throw new AppError("Gemeinschaftsbestellungen sind nur möglich, wenn alle Lieferadressen untereinander höchstens 20 Straßenkilometer auseinanderliegen.");
     }
   }
@@ -169,6 +184,6 @@ export async function calculateRoute(input: QuoteInput) {
     return total;
   });
   const metres = Math.min(...lengths);
-  if (!Number.isFinite(metres) || metres <= 0) throw new AppError("Für diese Lieferung wurde keine befahrbare Lkw-Strecke gefunden.");
+  if (!Number.isFinite(metres) || metres <= 0) throw manualQuoteRequired();
   return { metres, states: locations.map(location => location.state), labels: locations.map(location => location.label) };
 }

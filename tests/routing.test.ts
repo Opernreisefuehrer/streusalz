@@ -13,16 +13,36 @@ function mockedRouting(matrix: (number | null)[][], postcode = "55118", confiden
   return fetchMock;
 }
 describe("server-only road route", () => {
-  it("uses a real one-way HGV route when the matrix quota is exhausted, with quantity-independent persistent fetch caching", async () => {
+  it.each([2009, 2010])("requests a personal offer for a confirmed unrouteable destination (ORS %s)", async code => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: { code, message: "No routable road" } }, { status: 404 })));
+    await expect(calculatePostcodeDistance("27498")).rejects.toMatchObject({ status: 422, code: "manual_quote_required" });
+  });
+  it.each([401, 403, 429, 500, 503])("keeps provider HTTP %s a service error rather than declaring a manual delivery offer", async status => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: { code: 2010 } }, { status })));
+    await expect(calculatePostcodeDistance("27498")).rejects.toMatchObject({ status: 503, code: undefined });
+  });
+  it.each(["Not Found", '{"error":{"code":2003}}'])("does not mistake an invalid endpoint or response for an unrouteable destination: %s", async body => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status: 404 })));
+    await expect(calculatePostcodeDistance("27498")).rejects.toMatchObject({ status: 503, code: undefined });
+  });
+  it("requests a personal offer when exact delivery coordinates cannot be snapped by the matrix", async () => {
+    const fetchMock = mockedRouting([[0, 1000000], [1000000, 0]]);
+    const geocode = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url, options) => String(url).includes("/matrix/")
+      ? Response.json({ error: { code: 6010 } }, { status: 404 }) : geocode(url, options));
+    await expect(calculateRoute(fixture().input)).rejects.toMatchObject({ status: 422, code: "manual_quote_required" });
+  });
+  it.each(["36381", "65719"])("routes postcode %s directly with bounded postcode-only snapping and persistent caching", async postcode => {
     const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
-      if (url.includes("/matrix/")) return new Response('{"error":"Quota exceeded"}', { status: 403 });
       expect(url).toContain("/directions/driving-hgv/json");
-      expect(JSON.parse(String(options?.body))).toMatchObject({ preference: "recommended", units: "m", geometry: false });
+      const body = JSON.parse(String(options?.body));
+      expect(body).toMatchObject({ preference: "recommended", units: "m", geometry: false, radiuses: [350, 5000] });
+      if (postcode === "36381") expect(body.coordinates[1]).toEqual([9.5829, 50.3655]);
       return Response.json({ routes: [{ summary: { distance: 1471234 } }] });
     });
     vi.stubGlobal("fetch", fetchMock);
-    await expect(calculatePostcodeDistance("65719")).resolves.toBe(1471234);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(calculatePostcodeDistance(postcode)).resolves.toBe(1471234);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     for (const [, options] of fetchMock.mock.calls) {
       expect(options).toMatchObject({ cache: "force-cache", next: { revalidate: 86400 } });
       expect(String(options?.body)).not.toMatch(/product|tonnes|bigbag/);
@@ -52,6 +72,7 @@ describe("server-only road route", () => {
     const directionsCalls = fetchMock.mock.calls.filter(([url]) => url.includes("/directions/"));
     expect(directionsCalls).toHaveLength(8);
     expect(directionsCalls.every(([, options]) => JSON.parse(String(options?.body)).coordinates[1][0] !== 23.8787)).toBe(true);
+    expect(directionsCalls.every(([, options]) => !("radiuses" in JSON.parse(String(options?.body))))).toBe(true);
   });
   it("never substitutes a fabricated distance when both services fail or directions are malformed", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":"Quota exceeded"}', { status: 403 })));

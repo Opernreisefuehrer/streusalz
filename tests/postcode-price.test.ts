@@ -6,6 +6,7 @@ import { POST } from "../src/app/api/postcode-price/route";
 import { POST as quotePOST } from "../src/app/api/quote/route";
 import { rateLimit } from "../src/lib/auth";
 import { fixture } from "./fixtures";
+import germanPostcodes from "../src/lib/data/german-postcodes.json";
 
 vi.mock("../src/lib/auth", async importOriginal => {
   const actual = await importOriginal<typeof import("../src/lib/auth")>();
@@ -27,8 +28,10 @@ function mockRouting(distances: (number | null)[][] = [[0, 1500125], [9000000, 0
         properties: { label: "Teststraße, 65719 Hofheim", postalcode: "65719", country_a: "DEU", region_a: "HE", confidence: .99, layer: "address" },
       }] });
     }
-    if (!String(url).endsWith("/v2/matrix/driving-hgv") || options?.method !== "POST") throw new Error("Unexpected routing request.");
-    return Response.json({ distances });
+    if (options?.method !== "POST") throw new Error("Unexpected routing request.");
+    if (String(url).endsWith("/v2/matrix/driving-hgv")) return Response.json({ distances });
+    if (String(url).endsWith("/v2/directions/driving-hgv/json")) return Response.json({ routes: [{ summary: { distance: distances[0]?.[1] } }] });
+    throw new Error("Unexpected routing request.");
   });
   vi.stubGlobal("fetch", mock);
   return mock;
@@ -39,6 +42,59 @@ function quoteInput() {
   return { ...input, deliveries: [{ tonnes: 23, address: { street: "Teststraße 1", postcode: "65719", city: "Hofheim" } }] };
 }
 describe("binding postcode prices including delivery", () => {
+  it.each(["27498", "27499"])("returns an explicit personal-offer result for an unrouteable postcode %s, never a fake price or an outage", async postcode => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: { code: 2010, message: "No routable point" } }, { status: 404 })));
+    const response = await POST(new Request("https://www.streusalz-grosshandel.de/api/postcode-price", {
+      method: "POST", headers: { origin: "https://www.streusalz-grosshandel.de", "Content-Type": "application/json" },
+      body: JSON.stringify({ ...selection, postcode }),
+    }));
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body.code).toBe("manual_quote_required");
+    expect(body.error).toContain("individuelles Lieferangebot");
+    expect(body.error).not.toContain("Service");
+    expect(body).not.toHaveProperty("price");
+    expect(body).not.toHaveProperty("token");
+  });
+  it("contains valid reference coordinates for every bundled German postcode", () => {
+    const entries = Object.entries(germanPostcodes.postcodes);
+    expect(entries.length).toBeGreaterThan(8000);
+    for (const [postcode, coordinates] of entries) {
+      expect(postcode, postcode).toMatch(/^\d{5}$/);
+      expect(coordinates, postcode).toHaveLength(2);
+      expect(coordinates.every(Number.isFinite), postcode).toBe(true);
+      expect(coordinates[0], postcode).toBeGreaterThanOrEqual(5);
+      expect(coordinates[0], postcode).toBeLessThanOrEqual(16);
+      expect(coordinates[1], postcode).toBeGreaterThanOrEqual(47);
+      expect(coordinates[1], postcode).toBeLessThanOrEqual(56);
+    }
+  });
+  it.each([
+    { product: "bigbag" as const, tonnes: 23 },
+    { product: "bags" as const, tonnes: 23 },
+    { product: "bigbag" as const, tonnes: 46 },
+    { product: "bigbag" as const, tonnes: 46, items: [{ product: "bigbag" as const, tonnes: 23 }, { product: "bags" as const, tonnes: 23 }] },
+  ])("calculates and signs prices for every bundled postcode with simulated routes: %j", async configuration => {
+    const mock = mockRouting();
+    const entries = Object.entries(germanPostcodes.postcodes);
+    const expectedNet = (configuration.items ?? [{ product: configuration.product, tonnes: configuration.tonnes }])
+      .reduce((sum, item) => sum + item.tonnes * (item.product === "bigbag" ? 24500 : 25500), 0)
+      + 300025 * (configuration.tonnes / 23);
+    for (const [postcode, coordinates] of entries) {
+      const input = { ...configuration, postcode };
+      const result = await createPostcodePrice(input);
+      expect(result.price.netCents, postcode).toBe(expectedNet);
+      expect(result.price.vatCents, postcode).toBe(Math.round(expectedNet * .19));
+      expect(result.price.grossCents, postcode).toBe(result.price.netCents + result.price.vatCents);
+      expect(acceptedPostcodePrice(result.token, input), postcode).toEqual(result.price);
+      if (result.price.items) expect(result.price.items.reduce((sum, item) => sum + item.netCents, 0), postcode).toBe(expectedNet);
+      const call = mock.mock.calls.at(-1)!;
+      const request = JSON.parse(String(call[1]?.body));
+      expect(request.coordinates[1], postcode).toEqual(coordinates);
+      expect(request.radiuses, postcode).toEqual([350, 5000]);
+    }
+    expect(mock).toHaveBeenCalledTimes(entries.length);
+  });
   it("accepts only German postcode format and full 23-tonne truckloads", () => {
     expect(postcodePriceInputSchema.safeParse({ ...selection, postcode: "01067" }).success).toBe(true);
     for (const postcode of ["1234", "123456", "ABCDE", " 65719"]) {
@@ -59,17 +115,18 @@ describe("binding postcode prices including delivery", () => {
     expect(acceptedPostcodePrice(one.token, selection)).toEqual(one.price);
     expect(() => acceptedQuote(one.token, quoteInput())).toThrow();
     expect(mock).toHaveBeenCalledTimes(2);
-    expect(String(mock.mock.calls[0][0])).toContain("/v2/matrix/driving-hgv");
+    expect(String(mock.mock.calls[0][0])).toContain("/v2/directions/driving-hgv/json");
   });
-  it.each(["65719", "01067", "10115", "20095", "55118", "80331"])("resolves %s locally without relying on geocoder postcode coverage", async postcode => {
+  it.each(["36381", "65719", "01067", "10115", "20095", "55118", "80331"])("resolves %s locally without relying on geocoder postcode coverage", async postcode => {
     const mock = mockRouting();
     await expect(calculatePostcodeDistance(postcode)).resolves.toBe(1500125);
     expect(mock).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(String(mock.mock.calls[0][1]?.body));
-    expect(payload.locations).toHaveLength(2);
-    expect(payload.metrics).toEqual(["distance"]);
+    expect(payload.coordinates).toHaveLength(2);
+    expect(payload.radiuses).toEqual([350, 5000]);
     expect(payload.units).toBe("m");
-    if (postcode === "65719") expect(payload.locations[1]).toEqual([8.4493, 50.0902]);
+    if (postcode === "65719") expect(payload.coordinates[1]).toEqual([8.4493, 50.0902]);
+    if (postcode === "36381") expect(payload.coordinates[1]).toEqual([9.5829, 50.3655]);
   });
   it("keeps the signed all-in postcode price unchanged despite different street distances", async () => {
     mockRouting();
@@ -163,8 +220,8 @@ describe("binding postcode prices including delivery", () => {
     await expect(calculatePostcodeDistance("00000")).rejects.toThrow("keine Koordinaten");
     expect(mock).not.toHaveBeenCalled();
   });
-  it("rejects unavailable routes, malformed matrices, excessive amounts and missing configuration", async () => {
-    mockRouting([[0, null], [null, 0]]);
+  it("rejects unusable routes, malformed directions, excessive amounts and missing configuration", async () => {
+    mockRouting([[0, 0], [0, 0]]);
     await expect(calculatePostcodeDistance("65719")).rejects.toThrow("befahrbare");
     mockRouting([[0]]);
     await expect(calculatePostcodeDistance("65719")).rejects.toThrow("ungültige Antwort");
@@ -173,6 +230,25 @@ describe("binding postcode prices including delivery", () => {
     await expect(createPostcodePrice({ ...selection, tonnes })).rejects.toThrow("technische Grenze");
     vi.stubEnv("ORS_API_KEY", "");
     await expect(calculatePostcodeDistance("65719")).rejects.toThrow("nicht eingerichtet");
+  });
+  it("returns a signed price for 36381 when its postcode point cannot snap within the old 350-metre limit", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, options?: RequestInit) => {
+      expect(String(url)).toContain("/directions/driving-hgv/json");
+      const body = JSON.parse(String(options?.body));
+      if (body.radiuses?.[1] !== 5000) return Response.json({ error: { code: 2010, message: "Could not find routable point within a radius of 350.0 meters." } }, { status: 404 });
+      expect(body.coordinates[1]).toEqual([9.5829, 50.3655]);
+      return Response.json({ routes: [{ summary: { distance: 1500125 } }] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const input = { ...selection, postcode: "36381" };
+    const response = await POST(new Request("https://www.streusalz-grosshandel.de/api/postcode-price", {
+      method: "POST", headers: { origin: "https://www.streusalz-grosshandel.de", "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(acceptedPostcodePrice(body.token, input).netCents).toBe(863525);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
   it("serves only signed all-in prices through the same-origin, rate-limited, no-store endpoint", async () => {
     mockRouting();
