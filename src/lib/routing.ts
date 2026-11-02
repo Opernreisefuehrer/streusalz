@@ -19,6 +19,8 @@ const geocodeSchema = z.object({
       label: z.string(), postalcode: z.string().optional(), country_a: z.string().optional(),
       region: z.string().optional(), region_a: z.string().optional(), confidence: z.number().optional(),
       layer: z.string().optional(),
+      street: z.string().optional(), housenumber: z.string().optional(),
+      locality: z.string().optional(), localadmin: z.string().optional(),
     }),
   })),
 });
@@ -39,8 +41,11 @@ async function routingRequest(path: string, body?: unknown) {
     throw new AppError("Der Preisservice ist derzeit nicht erreichbar. Bitte versuchen Sie es später erneut.", 503);
   }
   if (!response.ok) {
-    console.error("Routing service HTTP failure", response.status);
-    throw new AppError("Der Gesamtpreis konnte nicht berechnet werden. Bitte prüfen Sie Ihre Adresse oder kontaktieren Sie uns.", 503);
+    const body = await response.text();
+    console.error("Routing service HTTP failure", { status: response.status, service: path.startsWith("geocode/") ? "address" : "matrix", response: body.slice(0, 1000).replaceAll(key, "[redacted]") });
+    throw new AppError(response.status === 403 || response.status === 429
+      ? "Der Adress- oder Routenservice ist derzeit nicht verfügbar. Dies bedeutet nicht, dass Ihre Adresse falsch ist. Bitte versuchen Sie es später erneut oder kontaktieren Sie uns per E-Mail."
+      : "Der Gesamtpreis konnte nicht berechnet werden. Bitte prüfen Sie Ihre Adresse oder kontaktieren Sie uns.", 503);
   }
   return response.json() as Promise<unknown>;
 }
@@ -62,20 +67,49 @@ export async function calculatePostcodeDistance(postcode: string) {
   if (metres === null || !Number.isFinite(metres) || metres <= 0) throw new AppError("Für diese Postleitzahl wurde keine befahrbare Lkw-Strecke gefunden.");
   return metres;
 }
+function normaliseAddressPart(value: string) {
+  return value.toLocaleLowerCase("de-DE").replaceAll("ß", "ss").replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
+}
+function matchesAddressWithoutPostcode(feature: z.infer<typeof geocodeSchema>["features"][number], address: QuoteInput["deliveries"][number]["address"]) {
+  const parts = address.street.trim().match(/^(.+?)\s+(\d+\s*[a-z]?(?:\s*[-/]\s*\d+\s*[a-z]?)?)$/i);
+  const centre = postcodeCoordinates[address.postcode];
+  if (!parts || !centre || !feature.properties.street || !feature.properties.housenumber) return false;
+  const street = (value: string) => normaliseAddressPart(value).replace(/str(?:asse)?$/, "strasse");
+  if (street(parts[1]) !== street(feature.properties.street)
+    || normaliseAddressPart(parts[2]).replaceAll(" ", "") !== normaliseAddressPart(feature.properties.housenumber).replaceAll(" ", "")) return false;
+  const city = normaliseAddressPart(address.city);
+  const cityMatches = [feature.properties.localadmin, feature.properties.locality].some(value => {
+    if (!value) return false;
+    const name = normaliseAddressPart(value);
+    return name === city || [" am ", " an der ", " im ", " bei "].some(suffix => name.startsWith(city + suffix));
+  });
+  if (!cityMatches) return false;
+  // Missing provider postcodes require exact street/house/municipality plus local proximity.
+  const radians = (value: number) => value * Math.PI / 180;
+  const [longitude, latitude] = feature.geometry.coordinates;
+  const a = Math.sin(radians(latitude - centre[1]) / 2) ** 2
+    + Math.cos(radians(centre[1])) * Math.cos(radians(latitude)) * Math.sin(radians(longitude - centre[0]) / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) <= 10000;
+}
 export async function calculateRoute(input: QuoteInput) {
   const locations = await Promise.all(input.deliveries.map(async ({ address }) => {
     const search = new URLSearchParams({ text: `${address.street}, ${address.postcode} ${address.city}`, "boundary.country": "DE", layers: "address", size: "3" });
     const parsed = geocodeSchema.safeParse(await routingRequest(`geocode/search?${search}`));
     if (!parsed.success) throw new AppError("Der Adressservice hat eine ungültige Antwort geliefert.", 503);
-    const match = parsed.data.features.find(feature => feature.properties.country_a === "DEU"
-      && feature.properties.postalcode === address.postcode
+    const candidates = parsed.data.features.filter(feature => feature.properties.country_a === "DEU"
       && feature.properties.layer === "address"
       && (feature.properties.confidence ?? 0) >= 0.8);
-    if (!match) throw new AppError(`Die Lieferadresse in ${address.postcode} ${address.city} konnte nicht eindeutig gefunden werden. Bitte Straße und Hausnummer prüfen.`);
+    const exactPostcode = candidates.find(feature => feature.properties.postalcode === address.postcode);
+    const withoutPostcode = candidates.filter(feature => !feature.properties.postalcode && matchesAddressWithoutPostcode(feature, address));
+    const match = exactPostcode ?? (withoutPostcode.length === 1 ? withoutPostcode[0] : undefined);
+    if (!match) {
+      console.error("Address lookup did not match", parsed.data.features.map(({ properties }) => ({ country: properties.country_a, postcodeMatches: properties.postalcode === address.postcode, hasPostcode: !!properties.postalcode, layer: properties.layer, confidence: properties.confidence })));
+      throw new AppError(`Die Lieferadresse in ${address.postcode} ${address.city} konnte nicht eindeutig gefunden werden. Bitte Straße und Hausnummer prüfen.`);
+    }
     const code = match.properties.region_a?.replace(/^DE-/, "");
     const state = STATES.find(state => state === code) ?? regions[match.properties.region ?? ""];
     if (!state) throw new AppError("Das Bundesland der Lieferadresse konnte nicht ermittelt werden. Bitte kontaktieren Sie uns.", 503);
-    return { coordinates: match.geometry.coordinates, state, label: match.properties.label };
+    return { coordinates: match.geometry.coordinates, state, label: match.properties.postalcode ? match.properties.label : `${address.street}, ${address.postcode} ${address.city}` };
   }));
   // The internal dispatch point is deliberately never returned to the storefront.
   const coordinates = [dispatchCoordinates, ...locations.map(location => location.coordinates)];

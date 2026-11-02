@@ -29,6 +29,16 @@ Die PNG- und ICO-Dateien werden mit `node scripts\generate-icons.mjs` aus
 ### Adminzugang
 
 `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` und `SESSION_SECRET` konfigurieren.
+`ORDER_NOTIFICATION_EMAIL` erhaelt optional eine zusaetzliche interne Kopie
+jeder neuen Bestellung ueber dieselbe Versandwarteschlange mit Wiederholungen.
+Identische Empfaenger werden nur einmal benachrichtigt; der Adminlogin bleibt
+unveraendert. Es werden keine SMS verschickt.
+
+Fehlt einer Adressantwort des Routendienstes die PLZ, wird sie nur bei genau
+einem eindeutigen Treffer mit passender Strasse, Hausnummer und Gemeinde sowie
+hoechstens 10 km Abstand zum gebuendelten PLZ-Mittelpunkt akzeptiert. Eine
+abweichende vorhandene PLZ wird nicht uebergangen. Anbieter-Sperren oder
+erschoepfte Kontingente bleiben sichtbare Servicefehler, keine Adressfehler.
 Ein Passwort wird über die Standardeingabe an `npm run admin:password -- --stdin`
 übergeben, nicht als sichtbares Befehlsargument. Unter Windows PowerShell:
 

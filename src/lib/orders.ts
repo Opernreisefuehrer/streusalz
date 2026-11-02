@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import type { Database } from "./db";
 import type { Participant, OrderInput } from "./validation";
@@ -80,6 +81,8 @@ async function enqueue(db: Database, orderId: string, recipient: string, subject
   await db.query("INSERT INTO outbox(id,order_id,document_id,recipient,subject,body) VALUES($1,$2,$3,$4,$5,$6)", [randomUUID(), orderId, documentId, recipient, subject, body]);
 }
 export async function createOrder(db: Database, input: OrderInput, quote: Quote) {
+  const copyEmail = process.env.ORDER_NOTIFICATION_EMAIL?.trim();
+  if (copyEmail && !z.email().safeParse(copyEmail).success) throw new AppError("Die E-Mail-Adresse für Bestellkopien ist ungültig konfiguriert.", 503);
   return db.transaction(async tx => {
     // Serializes the same request ID even when a retry arrives before the first transaction commits.
     await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))", [input.requestId]);
@@ -111,7 +114,8 @@ export async function createOrder(db: Database, input: OrderInput, quote: Quote)
       const body = `Guten Tag ${participant.contact},\n\nvielen Dank für Ihre Bestellung bei Streusalz Großhandel.\nIhre Bestellung ${number} ist eingegangen. Dies ist eine Eingangsbestätigung, noch keine Lieferzusage oder Rechnung.\n\nIhre Bestellung:\n${productContents(input.product, line.tonnes, quote.items)}\nInklusive Lieferung\nGesamt netto inkl. Lieferung: ${money(line.netCents)}\n19 % MwSt.: ${money(line.vatCents)}\nGesamt brutto inkl. Lieferung: ${money(line.grossCents)}\n\nLieferadresse: ${participant.company}, ${participant.address.street}, ${participant.address.postcode} ${participant.address.city}\nVoraussichtlicher Liefertermin: ${displayDate(line.deliveryDate)} (unverbindlich)\n\nWir stimmen Ihre Bestellung mit unserem Lieferanten ab. Nach dessen Bestätigung erhalten Sie die manuell freigegebene Rechnung. Zahlungsziel: 14 Tage nach tatsächlicher Lieferung. Zahlbar ohne Abzug. Kein Skonto.\n${input.participants.length > 1 ? "\nBei Gemeinschaftsbestellungen erhält jeder teilnehmende Auftraggeber eine eigene Rechnung über seinen Gesamtpreis inklusive Lieferung.\n" : ""}\nFreundliche Grüße\nStreusalz Großhandel\n${seller().name}\n${seller().email}`;
       await enqueue(tx, id, participant.email, `Vielen Dank für Ihre Bestellung ${number}`, `${body}\n\nDies ist noch keine Auftragsannahme. Hier erhalten Sie die bei Ihrer Bestellabgabe geltenden AGB:\n\n${snapshot.termsText}\n\nDatenschutzhinweise zur Verarbeitung Ihrer Angaben, auch bei Eintragung durch einen Gemeinschaftsbesteller:\n${siteUrl()}/datenschutz`);
     }
-    await enqueue(tx, id, process.env.ADMIN_EMAIL || seller().email, `Neue Bestellung ${number} · ${quote.totalTonnes} Tonnen`,
+    const notificationRecipients = new Set([process.env.ADMIN_EMAIL || seller().email, ...(copyEmail ? [copyEmail] : [])].map(email => email.toLowerCase()));
+    for (const recipient of notificationRecipients) await enqueue(tx, id, recipient, `Neue Bestellung ${number} · ${quote.totalTonnes} Tonnen`,
       `Neue Bestellung ${number}\n\n${productContents(input.product, quote.totalTonnes, quote.items)}\nGesamtmenge: ${quote.totalTonnes} Tonnen (${quote.trucks} Lkw)\nGesamt brutto: ${money(quote.grossCents)}\n\n${input.participants.map((participant, index) => `${participant.company}: ${participant.tonnes} t\n${participant.address.street}, ${participant.address.postcode} ${participant.address.city}\nKontakt: ${participant.contact}, ${participant.email}, ${participant.phone}\nTeilbetrag brutto: ${money(quote.lines[index].grossCents)}`).join("\n\n")}\n\nBitte manuell beim Lieferanten bestellen, dessen Bestätigung erfassen und erst danach die Rechnungen freigeben.\nGeschützte Verwaltung: ${siteUrl()}/admin/bestellungen/${id}`);
     await audit(tx, id, "Bestellung erfasst; Kundenbestätigungen und Adminbenachrichtigung in Versandwarteschlange", "customer");
     return order;

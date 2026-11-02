@@ -20,10 +20,30 @@ beforeEach(() => {
   vi.stubEnv("SELLER_IBAN", "TEST-IBAN-NOT-A-BANK-ACCOUNT");
   vi.stubEnv("SMTP_HOST", "smtp.example.invalid"); vi.stubEnv("SMTP_USER", "test"); vi.stubEnv("SMTP_PASSWORD", "test");
   vi.stubEnv("ADMIN_EMAIL", "admin@example.invalid");
+  vi.stubEnv("ORDER_NOTIFICATION_EMAIL", "");
   vi.stubEnv("MAIL_MODE", "smtp"); sendMail.mockReset(); sendMail.mockResolvedValue({ accepted: ["test@example.invalid"], rejected: [] });
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 describe("persistent PostgreSQL order lifecycle", () => {
+  it("queues one additional order notification without changing the admin login or duplicating retries", async () => {
+    vi.stubEnv("ORDER_NOTIFICATION_EMAIL", "orders@example.invalid");
+    const { order: input, quote } = fixture();
+    const order = await createOrder(db, input, quote);
+    await createOrder(db, input, quote);
+    const mails = await db.query<MailRow>("SELECT * FROM outbox WHERE order_id=$1 ORDER BY position", [order.id]);
+    expect(mails.map(mail => mail.recipient)).toEqual([input.participants[0].email, "admin@example.invalid", "orders@example.invalid"]);
+    expect(mails[2].body).toBe(mails[1].body);
+    expect(mails[2].subject).toBe(mails[1].subject);
+    expect(process.env.ADMIN_EMAIL).toBe("admin@example.invalid");
+    expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
+    vi.stubEnv("ORDER_NOTIFICATION_EMAIL", "ADMIN@example.invalid");
+    const next = fixture();
+    const deduplicated = await createOrder(db, next.order, next.quote);
+    expect(await drainOutbox(db, 3, deduplicated.id)).toEqual({ sent: 2, failed: 0, pending: 0 });
+    vi.stubEnv("ORDER_NOTIFICATION_EMAIL", "not-an-email");
+    const invalid = fixture();
+    await expect(createOrder(db, invalid.order, invalid.quote)).rejects.toThrow("ungültig konfiguriert");
+  });
   it("runs order → thanks emails → supplier confirmation → three invoice PDFs → delivery notes and correct due dates", async () => {
     const { order: input, quote } = fixture([10, 8, 5]);
     const order = await createOrder(db, input, quote);

@@ -13,6 +13,27 @@ function mockedRouting(matrix: (number | null)[][], postcode = "55118", confiden
   return fetchMock;
 }
 describe("server-only road route", () => {
+  it("accepts a unique exact street and house match near the postcode when the provider omits its postcode", async () => {
+    const input = fixture().input;
+    input.deliveries[0].address = { street: "Teststraße 39", postcode: "65719", city: "Hofheim" };
+    const properties = { label: "Teststraße 39, Hofheim am Taunus", street: "Teststr.", housenumber: "39", localadmin: "Hofheim am Taunus", country_a: "DEU", region_a: "HE", confidence: 1, layer: "address" };
+    let features = [{ geometry: { coordinates: [8.4493, 50.0902] }, properties }];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.includes("geocode")
+      ? { features } : { distances: [[0, 1500000], [1500000, 0]] }))));
+    await expect(calculateRoute(input)).resolves.toMatchObject({ states: ["HE"], labels: ["Teststraße 39, 65719 Hofheim"] });
+    for (const change of [{ housenumber: "40" }, { street: "Andere Straße" }, { localadmin: "Frankfurt", locality: "Frankfurt" }, { postalcode: "10115" }, { confidence: .4 }]) {
+      features = [{ geometry: { coordinates: [8.4493, 50.0902] }, properties: { ...properties, ...change } }];
+      await expect(calculateRoute(input)).rejects.toThrow("eindeutig");
+    }
+    features = [{ geometry: { coordinates: [13.4, 52.5] }, properties }];
+    await expect(calculateRoute(input)).rejects.toThrow("eindeutig");
+    features = Array.from({ length: 2 }, () => ({ geometry: { coordinates: [8.4493, 50.0902] }, properties }));
+    await expect(calculateRoute(input)).rejects.toThrow("eindeutig");
+  });
+  it("reports exhausted provider access without incorrectly blaming the address", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":"Quota exceeded"}', { status: 403 })));
+    await expect(calculateRoute(fixture().input)).rejects.toThrow("Dies bedeutet nicht, dass Ihre Adresse falsch ist");
+  });
   it("selects the shortest open route across three stops, without a return journey", async () => {
     const mock = mockedRouting([[0, 1500000, 1504000, 1508000], [1500000, 0, 8000, 16000], [1504000, 8000, 0, 8000], [1508000, 16000, 8000, 0]]);
     const route = await calculateRoute(fixture([10, 8, 5]).input);
