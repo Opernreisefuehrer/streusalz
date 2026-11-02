@@ -90,45 +90,78 @@ test("single company is the default and community ordering is an optional specia
   await secondCompany.getByRole("checkbox", { name: "Abweichende Rechnungsanschrift" }).check();
   await expect(secondCompany.getByLabel("Rechnungsanschrift: Straße und Hausnummer")).toBeVisible();
 });
-test("postcode estimate needs no company details and never unlocks checkout", async ({ page }) => {
+test("postcode all-in price appears automatically and is preserved during address confirmation", async ({ page }) => {
   const requests: unknown[] = [];
-  await page.route("**/api/freight-estimate", async route => {
+  await page.route("**/api/postcode-price", async route => {
     requests.push(route.request().postDataJSON());
     await route.fulfill({ json: {
-      nonBinding: true, postcode: "55118", totalTonnes: 23, trucks: 1,
-      goodsCents: 563500, freightCents: 300000, netCents: 863500, vatCents: 164065, grossCents: 1027565,
+      price: { input: route.request().postDataJSON(), createdOn: "2026-11-02", validUntil: Date.now() + 1800000, netCents: 863500, vatCents: 164065, grossCents: 1027565 },
+      token: "test-postcode-price-token",
+    } });
+  });
+  let finalRequest: unknown;
+  await page.route("**/api/quote", async route => {
+    finalRequest = route.request().postDataJSON();
+    await route.fulfill({ json: {
+      quote: { netCents: 863500, vatCents: 164065, grossCents: 1027565, lines: [{ tonnes: 23, grossCents: 1027565, resolvedAddress: "Teststraße 1, 55118 Mainz", deliveryDate: "2026-11-09" }] },
+      token: "test-final-address-quote-token",
     } });
   });
   await page.goto("/bestellen");
-  const postcode = page.getByLabel("Liefer-PLZ für die Schätzung");
-  const estimateButton = page.getByRole("button", { name: /Lieferkosten nach PLZ schätzen/ });
-  await expect(estimateButton).toBeDisabled();
+  const postcode = page.getByLabel("Liefer-PLZ", { exact: true });
+  await expect(page.getByRole("button", { name: /Aktuellen Preis anzeigen/ })).toBeDisabled();
   await postcode.fill("55118");
-  await estimateButton.click();
-  await expect(page.getByRole("status").filter({ hasText: "Unverbindliche PLZ-Schätzung" })).toContainText("3.000,00");
+  await expect(page.getByRole("status").filter({ hasText: "Aktueller Preis inkl. Lieferung" })).toContainText("8.635,00");
   expect(requests).toEqual([{ product: "bigbag", postcode: "55118", tonnes: 23 }]);
   await expect(page.getByLabel("Firmenname")).toHaveValue("");
   await expect(page.getByRole("button", { name: /Zahlungspflichtig bestellen/ })).toBeDisabled();
   await expect(page.locator(".participant-block").getByLabel("Postleitzahl")).toHaveValue("55118");
+  const summary = page.getByRole("complementary", { name: "Preisübersicht" });
+  await expect(summary).toContainText("8.635,00");
+  await expect(summary).not.toContainText(/Lieferkosten|Fracht|ca\.|ungefähr|Schätzung|Warenwert/);
+  await page.getByLabel("Lieferanschrift: Straße und Hausnummer").fill("Teststraße 1");
+  await page.getByLabel("Ort", { exact: true }).fill("Mainz");
+  await expect(summary).toContainText("8.635,00");
+  await page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ }).click();
+  await expect(summary).toContainText("Teststraße 1, 55118 Mainz");
+  expect(finalRequest).toMatchObject({ postcodePriceToken: "test-postcode-price-token", deliveries: [{ tonnes: 23, address: { street: "Teststraße 1", postcode: "55118", city: "Mainz" } }] });
+  await expect(summary).toContainText("8.635,00");
+  await expect(summary).not.toContainText(/Lieferkosten|Fracht|ca\.|ungefähr|Schätzung|Warenwert/);
+});
+test("postcode all-in prices are invalidated and fetched again when quantity, product or postcode changes", async ({ page }) => {
+  const requests: unknown[] = [];
+  await page.route("**/api/postcode-price", async route => {
+    const input = route.request().postDataJSON();
+    requests.push(input);
+    const netCents = (input.product === "bigbag" ? 863500 : 886500) * input.tonnes / 23;
+    const vatCents = Math.round(netCents * .19);
+    await route.fulfill({ json: {
+      price: { input, createdOn: "2026-11-02", validUntil: Date.now() + 1800000, netCents, vatCents, grossCents: netCents + vatCents },
+      token: "test-postcode-price-token",
+    } });
+  });
+  await page.goto("/bestellen");
+  const postcode = page.getByLabel("Liefer-PLZ", { exact: true });
+  await postcode.fill("55118");
+  const summary = page.getByRole("complementary", { name: "Preisübersicht" });
+  await expect(summary).toContainText("8.635,00");
   await page.getByLabel("Menge in vollen Tonnen").fill("46");
-  await expect(page.getByText("Unverbindliche PLZ-Schätzung", { exact: true })).toHaveCount(0);
-  await estimateButton.click();
+  await expect(summary).toContainText("17.270,00");
   expect(requests).toHaveLength(2);
   expect(requests[1]).toEqual({ product: "bigbag", postcode: "55118", tonnes: 46 });
   await page.getByRole("radio", { name: /25-kg-Sackware/ }).check();
-  await expect(page.getByText("Unverbindliche PLZ-Schätzung", { exact: true })).toHaveCount(0);
-  await estimateButton.click();
+  await expect(summary).toContainText("17.730,00");
   await postcode.fill("10115");
-  await expect(page.getByText("Unverbindliche PLZ-Schätzung", { exact: true })).toHaveCount(0);
+  await expect.poll(() => requests.length).toBe(4);
+  expect(requests[3]).toEqual({ product: "bags", postcode: "10115", tonnes: 46 });
 });
-test("postcode estimate errors are visible next to the postcode form", async ({ page }) => {
-  await page.route("**/api/freight-estimate", route => route.fulfill({
-    status: 503, json: { error: "Der Lieferkostenservice ist derzeit nicht erreichbar." },
+test("postcode price errors are visible next to the postcode form", async ({ page }) => {
+  await page.route("**/api/postcode-price", route => route.fulfill({
+    status: 503, json: { error: "Der Preisservice ist derzeit nicht erreichbar." },
   }));
   await page.goto("/bestellen");
-  await page.getByLabel("Liefer-PLZ für die Schätzung").fill("55118");
-  await page.getByRole("button", { name: /Lieferkosten nach PLZ schätzen/ }).click();
-  await expect(page.locator('.message-error[role="alert"]')).toContainText("Lieferkostenservice ist derzeit nicht erreichbar");
+  await page.getByLabel("Liefer-PLZ", { exact: true }).fill("55118");
+  await expect(page.locator('.message-error[role="alert"]')).toContainText("Preisservice ist derzeit nicht erreichbar");
   await expect(page.getByRole("button", { name: /Zahlungspflichtig bestellen/ })).toBeDisabled();
 });
 test("quantity rules, product separation and clear missing routing configuration", async ({ page }) => {
@@ -136,9 +169,9 @@ test("quantity rules, product separation and clear missing routing configuration
   await expect(page.getByRole("radio", { name: /25-kg-Sackware/ })).toBeChecked();
   await page.getByLabel("Menge in vollen Tonnen").fill("22");
   await expect(page.locator('.message-error[role="alert"]')).toContainText("23, 46, 69");
-  await expect(page.getByRole("button", { name: /Lieferkosten verbindlich berechnen/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ })).toBeDisabled();
   await page.getByLabel("Menge in vollen Tonnen").fill("23");
-  await page.getByRole("button", { name: /Lieferkosten verbindlich berechnen/ }).click();
+  await page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ }).click();
   await expect(page.locator('.message-error[role="alert"]')).toContainText("ausfüllen");
 });
 test("admin is protected and preview is not indexable", async ({ page, request }) => {

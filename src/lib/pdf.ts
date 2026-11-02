@@ -62,10 +62,15 @@ export async function buildPdf(document: DocumentRow) {
   write(product === "bags" ? `${line.tonnes} Paletten mit je 40 x 25 kg (${line.tonnes * 40} Säcke)` : `${line.tonnes} BigBags mit je 1.000 kg`, 10);
   if (document.kind === "invoice") {
     y -= 20;
-    write(`Einzelpreis netto: ${money(PRODUCTS[product].priceCents)} / Tonne`);
-    write(`Warenwert netto: ${money(line.goodsCents)}`);
-    write(`Lieferkosten netto (mengenproportionaler Anteil): ${money(line.freightCents)}`);
-    write(`Gesamt netto: ${money(line.netCents)}`, 12, true, 25);
+    if (line.deliveryIncluded) {
+      write("Streusalz inklusive Lieferung");
+      write(`Gesamt netto inkl. Lieferung: ${money(line.netCents)}`, 12, true, 25);
+    } else {
+      write(`Einzelpreis netto: ${money(PRODUCTS[product].priceCents)} / Tonne`);
+      write(`Warenwert netto: ${money(line.goodsCents)}`);
+      write(`Lieferkosten netto (mengenproportionaler Anteil): ${money(line.freightCents)}`);
+      write(`Gesamt netto: ${money(line.netCents)}`, 12, true, 25);
+    }
     write(`Umsatzsteuer 19 %: ${money(line.vatCents)}`);
     write(`Rechnungsbetrag brutto: ${money(line.grossCents)}`, 16, true, 30);
     y -= 10;

@@ -17,6 +17,9 @@ describe("consistent legal content and accurate technical notices", () => {
     expect(text).toContain("Kunde organisiert die geeignete und sichere Entladung");
     expect(text).toContain("Eingang der Bestellung");
     expect(text).toContain("ausdrückliche Auftragsannahme");
+    expect(text).toContain("Straße und Hausnummer innerhalb derselben Liefer-PLZ verändern diesen Preis nicht");
+    expect(text).toContain("keine zusätzlichen Lieferkosten");
+    expect(text).not.toContain("Hinzu kommen die im Bestellabschluss ausgewiesenen Lieferkosten");
     expect(text).not.toContain("Dej");
   });
   it("uses the privacy mailbox without falsely claiming no end-device storage", () => {

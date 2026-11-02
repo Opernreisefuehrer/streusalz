@@ -51,14 +51,18 @@ Passwort-Hashing und Anmeldebegrenzung. Ein Passwortwechsel macht alte Sitzungen
 
 ## Geschäftsregeln
 
-- BigBags: 245 €/Tonne netto, ein BigBag pro Tonne.
-- Sackware: 255 €/Tonne netto, 40 Säcke à 25 kg je 1-Tonnen-Palette.
+- Interne Warenbasis BigBags: 245 €/Tonne netto, ein BigBag pro Tonne.
+- Interne Warenbasis Sackware: 255 €/Tonne netto, 40 Säcke à 25 kg je 1-Tonnen-Palette.
+- Kunden sehen ausschliesslich Gesamtpreise inklusive Lieferung, netto plus 19 % MwSt.
+  und brutto, ohne gesonderte Waren-/Frachtpositionen.
 - Eine Gebindeart pro Auftrag, nicht mischbar.
 - Gesamtmenge 23, 46, 69 … Tonnen; volle Tonnen je Lieferadresse, maximal drei Adressen.
 - Alle Adressen müssen **untereinander in beiden Richtungen** höchstens 20 Straßenkilometer
   auseinanderliegen. Nur Deutschland.
 - Je 23-Tonnen-Lkw: 2 €/Straßenkilometer netto für die einfache gemeinsame Strecke.
-  Die kürzeste offene Lkw-Route über alle Stopps wird gewählt, ohne Rückfahrt.
+  Bei einem Unternehmen ist der Ortspunkt der Liefer-PLZ die verbindliche Preisbasis.
+  Bei Gemeinschaften wird die kürzeste offene Lkw-Route über alle Stopps gewählt,
+  ohne Rückfahrt.
 - Der interne Routenstart ist das Stadtzentrum von Dej (23.8787° E, 47.1425° N),
   nicht eine bekannte Lageradresse. Für eine exakt ab Lager gerechnete Strecke müssen
   die Koordinaten vor Inbetriebnahme mit dem Lieferanten abgestimmt werden.
@@ -80,17 +84,40 @@ Weitere Unternehmen werden nur im aufklappbaren Sonderfall
 Gemeinschaftsbestellung hinzugefuegt. Der ausdrueckliche Einstieg
 `/bestellen?gemeinschaft=1` oeffnet weiterhin die Gemeinschaftsplanung.
 
-Im Standardablauf liefert `/api/freight-estimate` nach Eingabe von Gebinde,
-23-Tonnen-Menge und deutscher Liefer-PLZ eine ausdruecklich unverbindliche
-Schaetzung anhand der Lkw-Strassenstrecke zum PLZ-Gebiet. Sie nutzt denselben
-Frachtsatz wie die verbindliche Kalkulation, enthaelt aber keinen Quote-Token
-und berechtigt nicht zur Bestellung. Erst die vollstaendige Lieferadresse
-ermoeglicht die verbindliche Kalkulation ueber `/api/quote`.
+Im Standardablauf liefert `/api/postcode-price` nach Eingabe von Gebinde,
+23-Tonnen-Menge und deutscher Liefer-PLZ automatisch den aktuellen Gesamtpreis
+inklusive Lieferung. Die Antwort enthaelt nur Netto, MwSt., Brutto, die
+Preisauswahl, Gueltigkeitsdaten und einen signierten `postcode-price`-Token,
+keine gesonderten Waren- oder Frachtbetraege.
+Der Preis gilt 30 Minuten, laengstens bis zum Tageswechsel in Europe/Berlin,
+fuer dieselbe PLZ, Menge und Gebindeart. Strasse und Hausnummer aendern ihn nicht.
+`/api/quote` prueft die vollstaendige Lieferadresse und uebernimmt mit
+`postcodePriceToken` exakt den zuvor angezeigten Preis. Die Adresspruefung
+verlaengert dessen Gueltigkeit nicht. Ohne vorherigen Preisabruf berechnet
+`/api/quote` dieselbe PLZ-basierte Preisgrundlage selbst.
+Der PLZ-Token allein erlaubt keine Bestellung; dafuer bleibt der an die
+vollstaendige Adresse gebundene `quote`-Token erforderlich.
+Gemeinschaftsbestellungen verwenden weiterhin alle vollstaendigen Lieferadressen
+und die 20-km-Regel; auch hier werden nur Preise inklusive Lieferung angezeigt.
+
+Die PLZ-Koordinaten werden lokal aus `src/lib/data/german-postcodes.json`
+gelesen, nicht ueber die lueckenhafte reine PLZ-Suche des Geocoders.
+Quelle: [GeoNames Deutschland-Postleitzahlen](https://download.geonames.org/export/zip/DE.zip),
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Die abgeleitete Tabelle enthaelt je PLZ den ersten Ortspunkt mit der hoechsten
+in der Quelldatei angegebenen Genauigkeit, nicht die genaue Kundenanschrift.
+Die Namensnennung steht auch direkt am PLZ-Rechner. Es findet keine Anfrage
+an GeoNames beim Seitenaufruf oder bei der Berechnung statt.
+Zur Aktualisierung DE.zip herunterladen, DE.txt entpacken und
+`node scripts\import-postcodes.mjs <Pfad-zur-DE.txt>` ausfuehren.
+Fehlende PLZ werden ausdruecklich gemeldet; bei einer Einzelbestellung wird
+kein abweichender, adressbasierter Preis stillschweigend eingesetzt.
 
 1. Server prüft Mengen und Adressen und berechnet die echte Straßenroute über
    OpenRouteService (Adress-Geocoding und `driving-hgv`-Distanzmatrix).
-2. Eine signierte Kalkulation gilt 30 Minuten, nur am Bestelltag und für dieselben
-   Mengen/Adressen. Kundenseitig manipulierte Preise werden nicht übernommen.
+2. Der signierte Gesamtpreis gilt 30 Minuten, nur am Bestelltag und für dieselbe
+   Preisauswahl. Der abschliessende Quote-Token bindet auch die Lieferadresse.
+   Kundenseitig manipulierte Preise werden nicht übernommen.
 3. Auftrag, Konditionentexte, Kundenbestätigungen und Adminbenachrichtigung werden atomar gespeichert.
    Wiederholte Anfragen mit derselben Request-ID erzeugen keinen zweiten Auftrag.
 4. Admin bestellt **extern/manuell** beim Lieferanten und erfasst dessen Bestätigung.
@@ -100,6 +127,10 @@ ermoeglicht die verbindliche Kalkulation ueber `/api/quote`.
 6. Nach Lieferung erfasst Admin die tatsächlichen Lieferdaten je Teilnehmer.
    Ein Klick erzeugt und versendet die Lieferscheine und die Fälligkeitsangaben.
 
+Neue Rechnungszeilen tragen `deliveryIncluded: true` und weisen ausschliesslich
+den Gesamtpreis inklusive Lieferung aus. Alte Rechnungssnapshots ohne diese
+Markierung behalten ihre bisherige Darstellung mit separaten Positionen.
+Danke-Mails nennen ebenfalls nur den Gesamtpreis inklusive Lieferung.
 Ausgestellte Dokumentdaten sind unveränderliche Snapshots. Die Verwaltung bietet PDF-Downloads,
 Suche, Statusfilter, Pagination und ein Auftragsprotokoll. Stornierung, Gutschriften,
 Buchhaltungsexport, Zahlungsabgleich und Lieferanten-API sind nicht implementiert.

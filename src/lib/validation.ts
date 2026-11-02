@@ -7,12 +7,12 @@ export const addressSchema = z.object({
   postcode: postcodeSchema,
   city: text,
 });
-export const freightEstimateInputSchema = z.object({
+export const postcodePriceInputSchema = z.object({
   product: z.enum(["bigbag", "bags"]),
   postcode: postcodeSchema,
   tonnes: z.number().int().min(23).refine(value => Number.isSafeInteger(value) && value % 23 === 0, "Die Menge muss 23, 46, 69 … Tonnen ergeben."),
 });
-export type FreightEstimateInput = z.infer<typeof freightEstimateInputSchema>;
+export type PostcodePriceInput = z.infer<typeof postcodePriceInputSchema>;
 export const participantSchema = z.object({
   company: text,
   contact: text,
@@ -32,6 +32,9 @@ export const quoteInputSchema = z.object({
     context.addIssue({ code: "custom", message: "Die Gesamtmenge muss volle 23-Tonnen-Ladungen ergeben: 23, 46, 69 … Tonnen.", path: ["deliveries"] });
   }
 });
+export const quoteRequestSchema = quoteInputSchema.and(z.object({
+  postcodePriceToken: z.string().min(10).max(4000).optional(),
+}));
 export const orderInputSchema = z.object({
   quoteToken: z.string().min(10).max(12000),
   requestId: z.uuid(),

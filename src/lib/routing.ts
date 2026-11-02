@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AppError } from "./errors";
 import { postcodeSchema, type QuoteInput } from "./validation";
 import { STATES, type State } from "./delivery-date";
+import germanPostcodes from "./data/german-postcodes.json";
 
 const regions: Record<string, State> = {
   "Baden-Württemberg": "BW", Bayern: "BY", Berlin: "BE", Brandenburg: "BB", Bremen: "HB", Hamburg: "HH",
@@ -10,11 +11,12 @@ const regions: Record<string, State> = {
   "Rheinland-Pfalz": "RP", Saarland: "SL", Sachsen: "SN", "Sachsen-Anhalt": "ST", "Schleswig-Holstein": "SH", Thüringen: "TH",
 };
 const dispatchCoordinates = [23.8787, 47.1425];
+const postcodeCoordinates: Readonly<Record<string, number[]>> = germanPostcodes.postcodes;
 const geocodeSchema = z.object({
   features: z.array(z.object({
     geometry: z.object({ coordinates: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]) }),
     properties: z.object({
-      label: z.string(), name: z.string().optional(), postalcode: z.string().optional(), country_a: z.string().optional(),
+      label: z.string(), postalcode: z.string().optional(), country_a: z.string().optional(),
       region: z.string().optional(), region_a: z.string().optional(), confidence: z.number().optional(),
       layer: z.string().optional(),
     }),
@@ -22,7 +24,7 @@ const geocodeSchema = z.object({
 });
 async function routingRequest(path: string, body?: unknown) {
   const key = process.env.ORS_API_KEY;
-  if (!key) throw new AppError("Die Lieferkostenberechnung ist noch nicht eingerichtet. Bitte fragen Sie die Fracht per E-Mail an.", 503);
+  if (!key) throw new AppError("Die Preisberechnung ist noch nicht eingerichtet. Bitte fragen Sie Ihren Gesamtpreis inklusive Lieferung per E-Mail an.", 503);
   let response: Response;
   try {
     response = await fetch(`https://api.openrouteservice.org/${path}`, {
@@ -34,11 +36,11 @@ async function routingRequest(path: string, body?: unknown) {
     });
   } catch (error) {
     console.error("Routing service connection failed", error instanceof Error ? error.name : "unknown");
-    throw new AppError("Der Lieferkostenservice ist derzeit nicht erreichbar. Bitte versuchen Sie es später erneut.", 503);
+    throw new AppError("Der Preisservice ist derzeit nicht erreichbar. Bitte versuchen Sie es später erneut.", 503);
   }
   if (!response.ok) {
     console.error("Routing service HTTP failure", response.status);
-    throw new AppError("Die Lieferkosten konnten nicht berechnet werden. Bitte prüfen Sie Ihre Adresse oder kontaktieren Sie uns.", 503);
+    throw new AppError("Der Gesamtpreis konnte nicht berechnet werden. Bitte prüfen Sie Ihre Adresse oder kontaktieren Sie uns.", 503);
   }
   return response.json() as Promise<unknown>;
 }
@@ -53,14 +55,9 @@ async function roadDistances(coordinates: number[][]) {
 }
 export async function calculatePostcodeDistance(postcode: string) {
   postcode = postcodeSchema.parse(postcode);
-  const search = new URLSearchParams({ text: postcode, "boundary.country": "DE", layers: "postalcode", size: "3" });
-  const parsed = geocodeSchema.safeParse(await routingRequest(`geocode/search?${search}`));
-  if (!parsed.success) throw new AppError("Der Adressservice hat eine ungültige Antwort geliefert.", 503);
-  const match = parsed.data.features.find(feature => feature.properties.country_a === "DEU"
-    && feature.properties.layer === "postalcode"
-    && (feature.properties.postalcode ?? feature.properties.name) === postcode);
-  if (!match) throw new AppError("Die Liefer-PLZ konnte nicht eindeutig in Deutschland gefunden werden. Bitte prüfen Sie Ihre Postleitzahl.");
-  const distances = await roadDistances([dispatchCoordinates, match.geometry.coordinates]);
+  const coordinates = postcodeCoordinates[postcode];
+  if (!coordinates) throw new AppError("Für diese Liefer-PLZ liegen noch keine Koordinaten vor. Bitte prüfen Sie die PLZ oder kontaktieren Sie uns für Ihren Preis inklusive Lieferung.");
+  const distances = await roadDistances([dispatchCoordinates, coordinates]);
   const metres = distances[0][1];
   if (metres === null || !Number.isFinite(metres) || metres <= 0) throw new AppError("Für diese Postleitzahl wurde keine befahrbare Lkw-Strecke gefunden.");
   return metres;

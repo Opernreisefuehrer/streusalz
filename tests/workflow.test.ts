@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, PDFPage } from "pdf-lib";
 import { embeddedDatabase, type Database } from "../src/lib/db";
 import { schema } from "../src/lib/schema";
 import { createOrder, confirmSupplier, releaseInvoices, markDelivered, getOrder, type DocumentRow, type MailRow } from "../src/lib/orders";
@@ -21,7 +21,7 @@ beforeEach(() => {
   vi.stubEnv("ADMIN_EMAIL", "admin@example.invalid");
   vi.stubEnv("MAIL_MODE", "smtp"); sendMail.mockReset(); sendMail.mockResolvedValue({ accepted: ["test@example.invalid"], rejected: [] });
 });
-afterEach(() => { vi.unstubAllEnvs(); });
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 describe("persistent PostgreSQL order lifecycle", () => {
   it("runs order → thanks emails → supplier confirmation → three invoice PDFs → delivery notes and correct due dates", async () => {
     const { order: input, quote } = fixture([10, 8, 5]);
@@ -38,6 +38,8 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(sendMail.mock.calls[3][0].to).toBe("admin@example.invalid");
     expect(sendMail.mock.calls[3][0].text).toContain(`/admin/bestellungen/${order.id}`);
     expect(sendMail.mock.calls[0][0].text).toContain("14 Tage nach tatsächlicher Lieferung");
+    expect(sendMail.mock.calls[0][0].text).toContain("Gesamt netto inkl. Lieferung:");
+    expect(sendMail.mock.calls[0][0].text).not.toMatch(/\n(?:Warenwert|Lieferkosten) netto:/);
     expect(sendMail.mock.calls[0][0].text).toContain(order.snapshot.termsText);
     await confirmSupplier(db, order.id, "SUPPLIER-TEST-42", "admin");
     expect((await getOrder(db, order.id)).status).toBe("supplier_confirmed");
@@ -47,7 +49,12 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(invoices).toHaveLength(3);
     expect(new Set(invoices.map(invoice => invoice.number)).size).toBe(3);
     expect(invoices.reduce((sum, invoice) => sum + invoice.snapshot.line.grossCents, 0)).toBe(quote.grossCents);
+    const drawText = vi.spyOn(PDFPage.prototype, "drawText");
     const buffer = await buildPdf(invoices[0]);
+    const invoiceText = drawText.mock.calls.map(([text]) => text).join("\n");
+    expect(invoiceText).toContain("Gesamt netto inkl. Lieferung:");
+    expect(invoiceText).not.toMatch(/Lieferkosten netto|Warenwert netto|Einzelpreis netto/);
+    drawText.mockRestore();
     expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
     expect((await PDFDocument.load(buffer)).getPageCount()).toBeGreaterThan(0);
     expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
@@ -63,6 +70,20 @@ describe("persistent PostgreSQL order lifecycle", () => {
     await expect(markDelivered(db, order.id, [quote.createdOn], "admin")).rejects.toThrow();
     const filtered = await db.query("SELECT * FROM orders WHERE ($1='' OR status=$1) AND ($2='' OR number ILIKE $3 OR (snapshot->'participants')::text ILIKE $3)", ["delivered", "Winterdienst", "%Winterdienst%"]);
     expect(filtered.length).toBeGreaterThan(0);
+  });
+  it("preserves the original price presentation of historical invoice snapshots", async () => {
+    const { order: input, quote } = fixture();
+    const order = await createOrder(db, input, quote);
+    await confirmSupplier(db, order.id, "legacy-test", "admin");
+    await releaseInvoices(db, order.id, "admin");
+    expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
+    const [invoice] = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='invoice'", [order.id]);
+    delete invoice.snapshot.line.deliveryIncluded;
+    const drawText = vi.spyOn(PDFPage.prototype, "drawText");
+    await buildPdf(invoice);
+    const text = drawText.mock.calls.map(([text]) => text).join("\n");
+    expect(text).toContain("Warenwert netto:");
+    expect(text).toContain("Lieferkosten netto");
   });
   it("deduplicates retried orders and refuses reuse with changed customer data", async () => {
     const { order: input, quote } = fixture();

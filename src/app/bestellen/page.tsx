@@ -5,7 +5,7 @@ import { isLiveReady, isSiteIndexable } from "@/lib/config";
 import { legalTexts } from "@/lib/legal";
 
 export const metadata: Metadata = {
-  title: "Bestellen & Lieferkosten berechnen",
+  title: "Bestellen & Preis inkl. Lieferung",
   alternates: { canonical: "/bestellen" },
   robots: { index: isSiteIndexable() && isLiveReady(), follow: isSiteIndexable() },
 };
