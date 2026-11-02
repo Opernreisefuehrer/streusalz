@@ -154,6 +154,8 @@ test("the header price button scrolls directly to the postcode input, including 
 });
 test("postcode all-in price appears automatically and is preserved during address confirmation", async ({ page }) => {
   const requests: unknown[] = [];
+  const submittedOrders: string[] = [];
+  page.on("request", request => { if (request.url().endsWith("/api/orders")) submittedOrders.push(request.url()); });
   await page.route("**/api/postcode-price", async route => {
     requests.push(route.request().postDataJSON());
     await route.fulfill({ json: {
@@ -175,6 +177,8 @@ test("postcode all-in price appears automatically and is preserved during addres
   const tonnePrice = summary.locator(".summary-row").filter({ hasText: "Pro Tonne netto inkl. Lieferung" });
   await expect(tonnePrice).toContainText("PLZ eingeben");
   await expect(summary).not.toHaveClass(/message-success/);
+  const orderShortcut = summary.getByRole("button", { name: "Jetzt bestellen", exact: true });
+  await expect(orderShortcut).toHaveCount(0);
   await expect(summary.getByText("Pro 25-kg-Sack netto inkl. Lieferung", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Aktuellen Preis anzeigen/ })).toBeDisabled();
   await postcode.fill("55118");
@@ -188,6 +192,11 @@ test("postcode all-in price appears automatically and is preserved during addres
   await expect(summary.locator(".fine-print")).toHaveCSS("color", "rgb(54, 93, 64)");
   expect(requests).toEqual([{ product: "bigbag", postcode: "55118", tonnes: 23 }]);
   await expect(page.getByLabel("Name des Unternehmens / der Einrichtung")).toHaveValue("");
+  await expect(orderShortcut).toBeVisible();
+  await expect(orderShortcut).toHaveAttribute("type", "button");
+  await orderShortcut.click();
+  await expect(page.getByLabel("Name des Unternehmens / der Einrichtung")).toBeFocused();
+  await expect(page.getByLabel("Liefer-PLZ", { exact: true })).toHaveValue("55118");
   await expect(page.getByRole("button", { name: /Zahlungspflichtig bestellen/ })).toBeDisabled();
   await expect(page.locator(".participant-block").getByLabel("Postleitzahl")).toHaveValue("55118");
   await expect(summary).toContainText("8.635,00");
@@ -196,6 +205,12 @@ test("postcode all-in price appears automatically and is preserved during addres
   await page.getByLabel("Lieferanschrift: Straße und Hausnummer").fill("Teststraße 1");
   await page.getByLabel("Ort", { exact: true }).fill("Mainz");
   await expect(summary).toContainText("8.635,00");
+  await page.getByLabel("Name des Unternehmens / der Einrichtung").fill("Testbetrieb");
+  await page.getByLabel("Ansprechperson", { exact: true }).fill("Testkontakt");
+  await page.getByLabel("E-Mail-Adresse", { exact: true }).fill("test@example.invalid");
+  await page.getByLabel("Telefon für die Lieferabstimmung").fill("0123456789");
+  await orderShortcut.click();
+  await expect(page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ })).toBeFocused();
   await page.getByRole("button", { name: /Lieferadresse prüfen & Gesamtpreis bestätigen/ }).click();
   await expect(summary).toContainText("Teststraße 1, 55118 Mainz");
   const confirmed = page.getByRole("status").filter({ hasText: "Lieferadresse bestätigt." });
@@ -207,6 +222,16 @@ test("postcode all-in price appears automatically and is preserved during addres
   expect(finalRequest).toMatchObject({ postcodePriceToken: "test-postcode-price-token", deliveries: [{ tonnes: 23, address: { street: "Teststraße 1", postcode: "55118", city: "Mainz" } }] });
   await expect(summary).toContainText("8.635,00");
   await expect(summary).not.toContainText(/Lieferkosten|Fracht|ca\.|ungefähr|Schätzung|Warenwert/);
+  await orderShortcut.click();
+  const business = page.getByRole("checkbox", { name: /Ich bestelle für ein Unternehmen oder einen öffentlichen Auftraggeber/ });
+  await expect(business).toBeFocused();
+  await expect(business).not.toBeChecked();
+  await business.check();
+  await orderShortcut.click();
+  const terms = page.locator('input[name="terms"]');
+  await expect(terms).toBeFocused();
+  await expect(terms).not.toBeChecked();
+  expect(submittedOrders).toEqual([]);
 });
 test("postcode all-in prices are invalidated and fetched again when quantity, product or postcode changes", async ({ page }) => {
   const requests: unknown[] = [];
@@ -243,6 +268,7 @@ test("postcode all-in prices are invalidated and fetched again when quantity, pr
   await page.getByLabel("25-kg-Sackware: Anzahl der 23-t-Ladungen").clear();
   await expect(tonnePrice).toContainText("PLZ eingeben");
   await expect(summary).not.toHaveClass(/message-success/);
+  await expect(summary.getByRole("button", { name: "Jetzt bestellen", exact: true })).toHaveCount(0);
   await page.getByLabel("BigBags: Anzahl der 23-t-Ladungen").fill("1");
   await expect(tonnePrice).toBeVisible();
   await expect(summary.getByText("Pro 25-kg-Sack netto inkl. Lieferung", { exact: true })).toHaveCount(0);
@@ -297,6 +323,8 @@ test("community overview shows delivery-inclusive tonne and sack prices after ad
   await expect(tonnePrice).toContainText("385,43");
   await expect(sackPrice).toContainText("9,64");
   await expect(summary).toContainText("8.865,00");
+  await summary.getByRole("button", { name: "Jetzt bestellen", exact: true }).click();
+  await expect(page.locator(".participant-block").first().getByLabel("Name des Unternehmens / der Einrichtung")).toBeFocused();
   await expect(page.getByRole("status").filter({ hasText: "Lieferadressen bestätigt." })).toHaveCSS("background-color", "rgb(237, 247, 239)");
   await expect(summary).toHaveCSS("background-color", "rgb(237, 247, 239)");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

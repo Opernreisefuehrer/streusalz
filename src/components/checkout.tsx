@@ -22,6 +22,7 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const requestId = useRef<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
   const total = participants.reduce((sum, participant) => sum + participant.tonnes, 0);
   const isCommunity = participants.length > 1;
@@ -83,6 +84,17 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
     setSeparateBilling(current => current.filter((_, i) => i !== index));
     setQuote(null); setPostcodePrice(null); setPriceError(""); setPricingBusy(false); requestId.current = null;
   }
+  function continueOrder() {
+    const form = formRef.current;
+    if (!form) return;
+    const details = form.querySelector<HTMLInputElement>(".participant-block input:invalid");
+    const next = details ?? (!quote
+      ? form.querySelector<HTMLButtonElement>("#bestellabschluss button[type='button']")
+      : form.querySelector<HTMLInputElement>("#bestellabschluss input:invalid") ?? form.querySelector<HTMLButtonElement>("button[type='submit']:enabled"));
+    const target = next ?? form.querySelector<HTMLElement>("#bestellabschluss");
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "center" });
+  }
   async function calculate() {
     setError(""); setQuote(null);
     const input = quoteInputSchema.safeParse({ product, ...(loadItems ? { items: loadItems } : {}), deliveries: participants.map(({ tonnes, address }) => ({ tonnes, address })) });
@@ -137,7 +149,7 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
       <label className="field">Ort<input required maxLength={160} autoComplete={billing ? "billing address-level2" : "shipping address-level2"} value={address.city} onChange={event => update(index, { [key]: { ...address, city: event.target.value } }, !billing)} /></label>
     </>;
   };
-  return <div className="container checkout-layout"><form onSubmit={submit}>
+  return <div className="container checkout-layout"><form ref={formRef} onSubmit={submit}>
     <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <section className="panel"><p className="eyebrow">01 · MENGE & PREIS</p><h2>Was benötigen Sie?</h2><p>{isCommunity ? "Wählen Sie eine Gebindeart für die gemeinsame 23-Tonnen-Ladung." : "Wählen Sie je Gebindeart die Anzahl der 23-Tonnen-Ladungen. Mit 0 wählen Sie eine Gebindeart ab."}</p><div className="product-options">{(Object.keys(PRODUCTS) as Product[]).map(key => isCommunity ? <label className="product-option" key={key}><input type="radio" name="product" value={key} checked={product === key} onChange={() => { setProduct(key); setLoadItems(undefined); setQuote(null); setPostcodePrice(null); setPriceError(""); setPricingBusy(false); requestId.current = null; }} /><b>{PRODUCTS[key].shortName}</b><span>{PRODUCTS[key].unit}</span><strong>Preis inkl. Lieferung</strong></label> : <label className={`product-option field${tonnesFor(key) > 0 ? " product-option-selected" : ""}`} key={key}><b>{PRODUCTS[key].shortName}</b><span>{PRODUCTS[key].unit} · 23 t je Ladung</span><span>Anzahl</span><input aria-label={`${PRODUCTS[key].shortName}: Anzahl der 23-t-Ladungen`} required type="number" min={0} step={1} value={tonnesFor(key) / 23} onChange={event => configureLoads((Object.keys(PRODUCTS) as Product[]).map(current => ({ product: current, tonnes: current === key ? Number(event.target.value) * 23 : tonnesFor(current) })))} /><span className="field-help">{tonnesFor(key)} t · {key === "bags" ? `${tonnesFor(key)} Paletten · ${tonnesFor(key) * 40} Säcke` : `${tonnesFor(key)} BigBags`}</span></label>)}</div>
         {!isCommunity && <>
@@ -177,7 +189,7 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
           {participants.length < 3 && <button className="button button-secondary full-width" type="button" disabled={!!loadItems} onClick={addParticipant}>+ Weiteren Auftraggeber hinzufügen</button>}
         </details>
       </section>
-      <section className="panel"><p className="eyebrow">03 · PREIS & ABSCHLUSS</p><h2>Erst Klarheit. Dann bestellen.</h2><p>{isCommunity ? "Ihr Gesamtpreis enthält die Lieferung an alle angegebenen Adressen. Jeder Auftraggeber sieht seinen eigenen Rechnungsbetrag." : "Die Lieferadresse wird vor Abschluss geprüft. Ihr angezeigter PLZ-Preis inklusive Lieferung bleibt bei gleicher Menge und Gebindeart unverändert."}</p><button className="button full-width" type="button" disabled={!validTotal || pricingBusy} onClick={calculate}>Lieferadresse prüfen & Gesamtpreis bestätigen ↗</button>
+      <section id="bestellabschluss" tabIndex={-1} className="panel"><p className="eyebrow">03 · PREIS & ABSCHLUSS</p><h2>Erst Klarheit. Dann bestellen.</h2><p>{isCommunity ? "Ihr Gesamtpreis enthält die Lieferung an alle angegebenen Adressen. Jeder Auftraggeber sieht seinen eigenen Rechnungsbetrag." : "Die Lieferadresse wird vor Abschluss geprüft. Ihr angezeigter PLZ-Preis inklusive Lieferung bleibt bei gleicher Menge und Gebindeart unverändert."}</p><button className="button full-width" type="button" disabled={!validTotal || pricingBusy} onClick={calculate}>Lieferadresse prüfen & Gesamtpreis bestätigen ↗</button>
         {quote && <><div className="message message-success price-success" role="status"><b>{isCommunity ? "Lieferadressen bestätigt." : "Lieferadresse bestätigt."}</b> Ihr Gesamtpreis inklusive Lieferung ist bestätigt. Sie können jetzt bestellen.</div><p className="fine-print">Die bestätigten Lieferadressen finden Sie in der Preisübersicht. Der Preis gilt 30 Minuten ab Preisabruf, längstens bis zum Tageswechsel; die Adressprüfung verlängert diese Frist nicht. Liefertermine sind voraussichtlich und unverbindlich.</p></>}
         <label className="checkbox"><input name="business" type="checkbox" required /><span>{isCommunity ? "Ich bestelle ausschließlich für Unternehmen oder öffentliche Auftraggeber und bin zur Bestellung für alle angegebenen Auftraggeber berechtigt. Alle Mengen und Lieferadressen sind mit den Teilnehmern abgestimmt." : "Ich bestelle für ein Unternehmen oder einen öffentlichen Auftraggeber und bin zur Bestellung für den angegebenen Auftraggeber berechtigt. Ich bestelle nicht als Privatkunde."}</span></label>
         <label className="checkbox"><input name="terms" type="checkbox" required /><span>Ich akzeptiere die <Link href="/agb" target="_blank">AGB</Link> und stimme dem Versand von Rechnungen und Lieferscheinen als PDF per E-Mail zu. Die <Link href="/datenschutz" target="_blank">Datenschutzhinweise</Link>, auch zur Adressprüfung und Routenberechnung, habe ich gelesen.</span></label>
@@ -196,6 +208,7 @@ export function Checkout({ initialProduct, community, enabled, legalVersion }: {
     {quote ? <><div className="summary-row"><span>Gesamt netto inkl. Lieferung</span><b>{money(quote.quote.netCents)}</b></div><div className="summary-row"><span>19 % MwSt.</span><b>{money(quote.quote.vatCents)}</b></div><div className="summary-row summary-total"><span>Gesamt brutto inkl. Lieferung</span><b>{money(quote.quote.grossCents)}</b></div>
       {quote.quote.lines.map((line, index) => <div className="quote-line" key={index}><h3>{isCommunity && `${String.fromCharCode(65 + index)} · `}{participants[index].company || (isCommunity ? `Auftraggeber ${index + 1}` : "Ihr Unternehmen / Ihre Einrichtung")} · {line.tonnes} t</h3><p>{line.resolvedAddress}</p><div className="summary-row"><span>{isCommunity ? "Teilrechnung brutto inkl. Lieferung" : "Rechnung brutto inkl. Lieferung"}</span><b>{money(line.grossCents)}</b></div><p>Voraussichtliche Lieferung: <b>{displayDate(line.deliveryDate)}</b></p></div>)}
     </> : postcodePrice && !isCommunity ? <><div className="summary-row"><span>Gesamt netto inkl. Lieferung</span><b>{money(postcodePrice.price.netCents)}</b></div><div className="summary-row"><span>19 % MwSt.</span><b>{money(postcodePrice.price.vatCents)}</b></div><div className="summary-row summary-total"><span>Gesamt brutto inkl. Lieferung</span><b>{money(postcodePrice.price.grossCents)}</b></div></> : <div className="message message-info">{isCommunity ? "Geben Sie Lieferadressen und Mengen ein und berechnen Sie Ihren Gesamtpreis inklusive Lieferung." : "Geben Sie im Bestellformular Ihre Liefer-PLZ ein. Ihr aktueller Preis inklusive Lieferung erscheint automatisch."}</div>}
+    {currentPrice && <button type="button" className="button full-width" aria-controls="bestellabschluss" disabled={busy || pricingBusy} onClick={continueOrder}>Jetzt bestellen <span aria-hidden="true">↗</span></button>}
     <p className="fine-print">Alle Preise inklusive Lieferung. Nettopreise zzgl. 19 % MwSt.; der Bruttobetrag enthält die Umsatzsteuer. Einzelpreise sind auf Cent gerundet; maßgeblich ist der Gesamtpreis. Nur für Gewerbetreibende und öffentliche Auftraggeber, z. B. Städte und Gemeinden. Kein Verkauf an Privatkunden.</p>
   </aside></div>;
 }
