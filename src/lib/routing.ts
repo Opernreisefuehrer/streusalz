@@ -24,6 +24,11 @@ const geocodeSchema = z.object({
     }),
   })),
 });
+class RoutingServiceError extends AppError {
+  constructor(public fallbackAllowed: boolean) {
+    super("Der Adress- oder Routenservice ist derzeit nicht verfügbar. Dies bedeutet nicht, dass Ihre Adresse falsch ist. Bitte versuchen Sie es später erneut oder kontaktieren Sie uns per E-Mail.", 503);
+  }
+}
 async function routingRequest(path: string, body?: unknown) {
   const key = process.env.ORS_API_KEY;
   if (!key) throw new AppError("Die Preisberechnung ist noch nicht eingerichtet. Bitte fragen Sie Ihren Gesamtpreis inklusive Lieferung per E-Mail an.", 503);
@@ -34,29 +39,57 @@ async function routingRequest(path: string, body?: unknown) {
       headers: { Authorization: key, "Content-Type": "application/json" },
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(20000),
-      cache: "no-store",
+      cache: "force-cache",
+      next: { revalidate: 86400 },
     });
   } catch (error) {
     console.error("Routing service connection failed", error instanceof Error ? error.name : "unknown");
-    throw new AppError("Der Preisservice ist derzeit nicht erreichbar. Bitte versuchen Sie es später erneut.", 503);
+    throw new RoutingServiceError(true);
   }
   if (!response.ok) {
     const body = await response.text();
-    console.error("Routing service HTTP failure", { status: response.status, service: path.startsWith("geocode/") ? "address" : "matrix", response: body.slice(0, 1000).replaceAll(key, "[redacted]") });
-    throw new AppError(response.status === 403 || response.status === 429
-      ? "Der Adress- oder Routenservice ist derzeit nicht verfügbar. Dies bedeutet nicht, dass Ihre Adresse falsch ist. Bitte versuchen Sie es später erneut oder kontaktieren Sie uns per E-Mail."
-      : "Der Gesamtpreis konnte nicht berechnet werden. Bitte prüfen Sie Ihre Adresse oder kontaktieren Sie uns.", 503);
+    console.error("Routing service HTTP failure", { status: response.status, service: path.split("?")[0], response: body.slice(0, 1000).replaceAll(key, "[redacted]") });
+    throw new RoutingServiceError(response.status === 403 || response.status === 429 || response.status >= 500);
   }
   return response.json() as Promise<unknown>;
 }
 async function roadDistances(coordinates: number[][]) {
+  let response: unknown;
+  try {
+    response = await routingRequest("v2/matrix/driving-hgv", { locations: coordinates, metrics: ["distance"], units: "m" });
+  } catch (error) {
+    if (!(error instanceof RoutingServiceError) || !error.fallbackAllowed) throw error;
+    console.warn("Matrix service unavailable; calculating directed HGV road distances with the directions service.");
+    return directionsDistances(coordinates);
+  }
   const matrix = z.object({ distances: z.array(z.array(z.number().nonnegative().nullable())) }).safeParse(
-    await routingRequest("v2/matrix/driving-hgv", { locations: coordinates, metrics: ["distance"], units: "m" }),
+    response,
   );
   if (!matrix.success || matrix.data.distances.length !== coordinates.length || matrix.data.distances.some(row => row.length !== coordinates.length)) {
     throw new AppError("Der Routenservice hat eine ungültige Antwort geliefert.", 503);
   }
   return matrix.data.distances;
+}
+async function directionsDistances(coordinates: number[][]) {
+  const distances: (number | null)[][] = coordinates.map((_, i) => coordinates.map((_, j) => i === j ? 0 : null));
+  const legs: Promise<void>[] = [];
+  for (let from = 0; from < coordinates.length; from++) {
+    for (let to = 1; to < coordinates.length; to++) {
+      if (from === to) continue;
+      legs.push((async () => {
+        const parsed = z.object({
+          routes: z.array(z.object({ summary: z.object({ distance: z.number().finite().nonnegative() }) })).min(1),
+        }).safeParse(await routingRequest("v2/directions/driving-hgv/json", {
+          coordinates: [coordinates[from], coordinates[to]], preference: "fastest", units: "m",
+          geometry: false, instructions: false,
+        }));
+        if (!parsed.success) throw new AppError("Der Routenservice hat eine ungültige Antwort geliefert.", 503);
+        distances[from][to] = parsed.data.routes[0].summary.distance;
+      })());
+    }
+  }
+  await Promise.all(legs);
+  return distances;
 }
 export async function calculatePostcodeDistance(postcode: string) {
   postcode = postcodeSchema.parse(postcode);

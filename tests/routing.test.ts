@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { calculateRoute } from "../src/lib/routing";
+import { calculateRoute, calculatePostcodeDistance } from "../src/lib/routing";
 import { fixture } from "./fixtures";
 
 beforeEach(() => { vi.stubEnv("ORS_API_KEY", "test-only-key"); });
@@ -13,6 +13,53 @@ function mockedRouting(matrix: (number | null)[][], postcode = "55118", confiden
   return fetchMock;
 }
 describe("server-only road route", () => {
+  it("uses a real one-way HGV route when the matrix quota is exhausted, with quantity-independent persistent fetch caching", async () => {
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.includes("/matrix/")) return new Response('{"error":"Quota exceeded"}', { status: 403 });
+      expect(url).toContain("/directions/driving-hgv/json");
+      expect(JSON.parse(String(options?.body))).toMatchObject({ preference: "fastest", units: "m", geometry: false });
+      return Response.json({ routes: [{ summary: { distance: 1471234 } }] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(calculatePostcodeDistance("65719")).resolves.toBe(1471234);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(options).toMatchObject({ cache: "force-cache", next: { revalidate: 86400 } });
+      expect(String(options?.body)).not.toMatch(/product|tonnes|bigbag/);
+    }
+  });
+  it("preserves directed community distance checks using directions instead of an unavailable matrix", async () => {
+    let reverseDistance = 20001;
+    const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url.includes("geocode")) {
+        const text = new URL(url).searchParams.get("text")!;
+        const second = text.includes("Second");
+        return Response.json({ features: [{ geometry: { coordinates: [second ? 8.3 : 8.2, 50] }, properties: {
+          label: text, postalcode: "55118", country_a: "DEU", region_a: "RP", confidence: 1, layer: "address",
+        } }] });
+      }
+      if (url.includes("/matrix/")) return new Response("Unavailable", { status: 503 });
+      const { coordinates: [[from], [to]] } = JSON.parse(String(options?.body));
+      const distance = from === 23.8787 ? (to === 8.2 ? 1500000 : 1510000) : from === 8.2 ? 19000 : reverseDistance;
+      return Response.json({ routes: [{ summary: { distance } }] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const input = fixture([12, 11]).input;
+    input.deliveries[1].address.street = "Second 1";
+    await expect(calculateRoute(input)).rejects.toThrow("20 Straßenkilometer");
+    reverseDistance = 20000;
+    await expect(calculateRoute(input)).resolves.toMatchObject({ metres: 1519000 });
+    const directionsCalls = fetchMock.mock.calls.filter(([url]) => url.includes("/directions/"));
+    expect(directionsCalls).toHaveLength(8);
+    expect(directionsCalls.every(([, options]) => JSON.parse(String(options?.body)).coordinates[1][0] !== 23.8787)).toBe(true);
+  });
+  it("never substitutes a fabricated distance when both services fail or directions are malformed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":"Quota exceeded"}', { status: 403 })));
+    await expect(calculatePostcodeDistance("65719")).rejects.toThrow("Dies bedeutet nicht, dass Ihre Adresse falsch ist");
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.includes("/matrix/")
+      ? new Response("Unavailable", { status: 503 }) : Response.json({ routes: [{ summary: { distance: -1 } }] })));
+    await expect(calculatePostcodeDistance("65719")).rejects.toThrow("ungültige Antwort");
+  });
   it("accepts a unique exact street and house match near the postcode when the provider omits its postcode", async () => {
     const input = fixture().input;
     input.deliveries[0].address = { street: "Teststraße 39", postcode: "65719", city: "Hofheim" };

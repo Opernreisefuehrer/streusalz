@@ -137,7 +137,7 @@ export function privacyDocument(): LegalDocument {
       section("sicherheit", "10. Sicherheit und Missbrauchsabwehr",
         "Der produktive Betrieb verwendet HTTPS. Administrative Funktionen sind zugangsgeschützt; Passwörter werden nicht als Klartext gespeichert. Freigaben und Dokumentversand werden für die Auftragsabwicklung protokolliert.",
         "Für die Begrenzung missbräuchlicher Anfragen werden serverseitig gehashte, zweckgebundene Zugriffsschlüssel und zeitlich begrenzte Zähler verarbeitet. Diese Schlüssel sind pseudonymisierte, nicht zwingend anonyme Daten. Abgelaufene Datensätze werden beim täglichen Bereinigungslauf entfernt, sobald sie seit mehr als einem Tag abgelaufen sind.",
-        "Eine Frachtberechnung basiert auf Gebinde, Menge und Straßenroute, nicht auf Werbeprofilen. Die Auftragsannahme und Rechnungsfreigabe erfolgen manuell."),
+        "Eine Frachtberechnung basiert auf Gebinde, Menge und Straßenroute, nicht auf Werbeprofilen. Erfolgreiche Antworten zur Adress- und Routenprüfung werden serverseitig für bis zu 24 Stunden zwischengespeichert, um wiederholte Übermittlungen zu vermeiden und den Dienst zuverlässig bereitzustellen. Die Auftragsannahme und Rechnungsfreigabe erfolgen manuell."),
       {
         ...section("rechte", "11. Ihre Rechte",
           "Sie haben nach Maßgabe der DSGVO Rechte auf Auskunft (Art. 15), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18) und Datenübertragbarkeit (Art. 20). Gesetzliche Aufbewahrungspflichten können einer sofortigen Löschung entgegenstehen.",

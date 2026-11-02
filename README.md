@@ -39,6 +39,15 @@ einem eindeutigen Treffer mit passender Strasse, Hausnummer und Gemeinde sowie
 hoechstens 10 km Abstand zum gebuendelten PLZ-Mittelpunkt akzeptiert. Eine
 abweichende vorhandene PLZ wird nicht uebergangen. Anbieter-Sperren oder
 erschoepfte Kontingente bleiben sichtbare Servicefehler, keine Adressfehler.
+Erfolgreiche Adress- und Lkw-Routenantworten werden im serverseitigen Next.js
+Data Cache fuer 24 Stunden wiederverwendet, unabhaengig von Gebinde und Menge.
+Bei Kontingent-, Verbindungs- oder Serverfehlern des Matrixdienstes werden die
+benoetigten gerichteten Strecken ueber den Directionsdienst mit `driving-hgv`
+berechnet. Das nutzt dessen separates Kontingent, keine Luftlinien oder
+Pauschalannahmen. Fuer Gemeinschaften bleiben beide Fahrtrichtungen und die
+20-km-Grenze verbindlich; eine Rueckfahrt zum Versandort wird nicht berechnet.
+Sind beide Dienste nicht verfuegbar, bleibt die Bestellung mit einem
+ausdruecklichen Servicehinweis gesperrt; es gibt keinen erfundenen Preis.
 Ein Passwort wird über die Standardeingabe an `npm run admin:password -- --stdin`
 übergeben, nicht als sichtbares Befehlsargument. Unter Windows PowerShell:
 
