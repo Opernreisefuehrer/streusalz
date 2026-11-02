@@ -70,6 +70,7 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(sendMail.mock.calls[0][0].text).not.toMatch(/\bundefined\b/);
     expect(sendMail.mock.calls[0][0].text).not.toMatch(/\n(?:Warenwert|Lieferkosten) netto:/);
     expect(sendMail.mock.calls[0][0].text).toContain(order.snapshot.termsText);
+    expect(sendMail.mock.calls[0][0].text).not.toContain("Lieferant");
     await confirmSupplier(db, order.id, "SUPPLIER-TEST-42", "admin");
     expect((await getOrder(db, order.id)).status).toBe("supplier_confirmed");
     await releaseInvoices(db, order.id, "admin");
@@ -77,6 +78,7 @@ describe("persistent PostgreSQL order lifecycle", () => {
     const invoices = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='invoice' ORDER BY participant_index", [order.id]);
     expect(invoices).toHaveLength(3);
     expect(invoices.every(invoice => invoice.snapshot.paymentWithoutDiscount)).toBe(true);
+    expect(invoices.every(invoice => invoice.snapshot.invoiceDesign === "brand-v1")).toBe(true);
     expect(new Set(invoices.map(invoice => invoice.number)).size).toBe(3);
     expect(invoices.reduce((sum, invoice) => sum + invoice.snapshot.line.grossCents, 0)).toBe(quote.grossCents);
     const drawText = vi.spyOn(PDFPage.prototype, "drawText");
@@ -87,10 +89,14 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(invoiceText).not.toMatch(/Lieferkosten netto|Warenwert netto|Einzelpreis netto/);
     drawText.mockRestore();
     expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
-    expect((await PDFDocument.load(buffer)).getPageCount()).toBeGreaterThan(0);
+    const loadedInvoice = await PDFDocument.load(buffer);
+    expect(loadedInvoice.getPageCount()).toBe(1);
+    expect(loadedInvoice.getPages()[0].node.Resources()?.toString()).toContain("/XObject");
     expect(await drainOutbox(db, 3, order.id)).toEqual({ sent: 3, failed: 0, pending: 0 });
     expect(sendMail.mock.calls.at(-1)![0].attachments[0].filename).toMatch(/^R-.*\.pdf$/);
     expect(sendMail.mock.calls.at(-1)![0].text).toContain("Hiermit nehmen wir Ihr Angebot");
+    expect(sendMail.mock.calls.at(-1)![0].text).toContain("wir bestätigen Ihre Bestellung");
+    expect(sendMail.mock.calls.at(-1)![0].text).not.toContain("Lieferant");
     expect(sendMail.mock.calls.at(-1)![0].text).toContain("Zahlbar ohne Abzug. Kein Skonto.");
     expect(sendMail.mock.calls.at(-1)![0].text).toContain(order.snapshot.termsText);
     await markDelivered(db, order.id, input.participants.map(() => quote.createdOn), "admin");
@@ -114,6 +120,7 @@ describe("persistent PostgreSQL order lifecycle", () => {
     const [invoice] = await db.query<DocumentRow>("SELECT * FROM documents WHERE order_id=$1 AND kind='invoice'", [order.id]);
     delete invoice.snapshot.line.deliveryIncluded;
     delete invoice.snapshot.paymentWithoutDiscount;
+    delete invoice.snapshot.invoiceDesign;
     expect(invoice.snapshot.seller).not.toHaveProperty("phone");
     if (!invoice.snapshot.seller) throw new Error("The new invoice seller snapshot is missing.");
     Object.assign(invoice.snapshot.seller, { phone: "HISTORICAL-SELLER-PHONE" });
@@ -158,7 +165,7 @@ describe("persistent PostgreSQL order lifecycle", () => {
     expect(text).toContain("23 Tonnen Streusalz in 25-kg-Säcken");
     expect(text).toContain("23 BigBags mit je 1.000 kg");
     expect(text).toContain("920 Säcke");
-    expect(text.match(/Positionspreis netto inkl. Lieferung/g)).toHaveLength(2);
+    expect(text.match(/Inklusive Lieferung/g)).toHaveLength(2);
     expect(text).not.toContain("Lieferkosten netto");
     expect(text).toContain("Kein Skonto");
     await drainOutbox(db, 1, order.id);

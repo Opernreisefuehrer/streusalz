@@ -14,7 +14,8 @@ test("homepage preserves the legacy search title, topic and canonical identity",
   expect(new URL(canonicalUrl).pathname).toBe("/");
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: /Streusalz für Wege,\s*Einfahrten und Straßen\./ })).toBeVisible();
-  await expect(page.locator(".spec-card")).toContainText("Lieferantenspezifikation");
+  await expect(page.locator(".spec-card")).toContainText("Produktspezifikation");
+  await expect(page.locator("main")).not.toContainText(/Lieferant/);
   await expect(page.locator(".spec-card")).toContainText("mind. 96 % NaCl · 0,1–5 mm");
   await expect(page.locator(".spec-card")).not.toContainText("Historische Spezifikation");
   const response = await request.get("/");

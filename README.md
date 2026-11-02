@@ -131,6 +131,18 @@ Passwort-Hashing und Anmeldebegrenzung. Ein Passwortwechsel macht alte Sitzungen
 
 ### Bestellablauf
 
+Kundenkommunikation auf Website, in E-Mails und neuen Vertragstexten spricht
+von uns als Lieferant. Externe Beschaffung und Lieferantenbestaetigungen
+bleiben ausschliesslich im internen Verwaltungsablauf.
+
+Neue Rechnungssnapshots tragen `invoiceDesign: "brand-v1"` und verwenden das
+SG-Logo, Markenfarben, inklusive Positionspreise sowie einen hervorgehobenen
+Gesamtbetrag und Zahlungsbereich. Logo und Unicode-Schriften werden fuer die
+Serverfunktionen mitgebuendelt. Ausgestellte Rechnungen ohne diese Version
+sowie historische Preis- und Zahlungsbedingungen behalten ihre bisherige
+Darstellung; Lieferscheine bleiben unveraendert. Das PDF wird weiterhin vor
+dem Speichern einer Bestellung bzw. Rechnung vollstaendig erzeugt und geprueft.
+
 Standard ist eine Bestellung fuer ein Unternehmen mit einem Rechnungsempfaenger
 und einer Lieferadresse; eine abweichende Rechnungsanschrift ist optional.
 Weitere Unternehmen werden nur im aufklappbaren Sonderfall

@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite", "pg", "nodemailer", "date-holidays"],
-  outputFileTracingIncludes: { "/*": ["./assets/fonts/*.ttf"] },
+  outputFileTracingIncludes: { "/*": ["./assets/fonts/*.ttf", "./public/images/streusalz-logo.png"] },
   async redirects() {
     return [
       { source: "/index.html", destination: "/", permanent: true },

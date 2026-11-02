@@ -20,6 +20,7 @@ describe("consistent legal content and accurate technical notices", () => {
     expect(text).toContain("ausdrückliche Auftragsannahme");
     expect(text).toContain("Wir stimmen die Lieferung mit Ihnen ab.");
     expect(text).not.toContain("Wir bestellen beziehungsweise disponieren die Ware beim Lieferanten");
+    expect(text).not.toMatch(/Lieferant/);
     expect(text).toContain("Straße und Hausnummer innerhalb derselben Liefer-PLZ verändern diesen Preis nicht");
     expect(text).toContain("keine zusätzlichen Lieferkosten");
     expect(text).toContain("öffentliche Auftraggeber, insbesondere Städte, Gemeinden und kommunale Einrichtungen");
@@ -40,6 +41,7 @@ describe("consistent legal content and accurate technical notices", () => {
     const text = documentText(document);
     expect(document.sections).toHaveLength(12);
     expect(text).toContain("datenschutz@streusalz-grosshandel.de");
+    expect(text).not.toMatch(/Lieferant/);
     expect(text).toContain("streusalz-admin");
     expect(text).toContain("streusalz-pending-request");
     expect(text).toContain("streusalz-receipt");
