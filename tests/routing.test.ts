@@ -17,7 +17,7 @@ describe("server-only road route", () => {
     const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
       if (url.includes("/matrix/")) return new Response('{"error":"Quota exceeded"}', { status: 403 });
       expect(url).toContain("/directions/driving-hgv/json");
-      expect(JSON.parse(String(options?.body))).toMatchObject({ preference: "fastest", units: "m", geometry: false });
+      expect(JSON.parse(String(options?.body))).toMatchObject({ preference: "recommended", units: "m", geometry: false });
       return Response.json({ routes: [{ summary: { distance: 1471234 } }] });
     });
     vi.stubGlobal("fetch", fetchMock);

@@ -255,6 +255,10 @@ test("community overview shows delivery-inclusive tonne and sack prices after ad
     } });
   });
   await page.goto("/bestellen?gemeinschaft=1&produkt=bags");
+  await expect(page.locator("form")).not.toContainText("positive Teilmenge");
+  await expect(page.locator('.message-error[role="alert"]')).toContainText("Menge in vollen Tonnen");
+  await page.getByRole("link", { name: "Zur Mengeneingabe" }).click();
+  await expect(page.locator("#teilmenge-0")).toBeFocused();
   const summary = page.getByRole("complementary", { name: "Preisübersicht" });
   const tonnePrice = summary.locator(".summary-row").filter({ hasText: "Pro Tonne netto inkl. Lieferung" });
   const sackPrice = summary.locator(".summary-row").filter({ hasText: "Pro 25-kg-Sack netto inkl. Lieferung" });

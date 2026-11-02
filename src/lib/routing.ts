@@ -38,7 +38,7 @@ async function routingRequest(path: string, body?: unknown) {
       method: body ? "POST" : "GET",
       headers: { Authorization: key, "Content-Type": "application/json" },
       ...(body ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(path.startsWith("v2/directions/") ? 60000 : 15000),
       cache: "force-cache",
       next: { revalidate: 86400 },
     });
@@ -80,7 +80,7 @@ async function directionsDistances(coordinates: number[][]) {
         const parsed = z.object({
           routes: z.array(z.object({ summary: z.object({ distance: z.number().finite().nonnegative() }) })).min(1),
         }).safeParse(await routingRequest("v2/directions/driving-hgv/json", {
-          coordinates: [coordinates[from], coordinates[to]], preference: "fastest", units: "m",
+          coordinates: [coordinates[from], coordinates[to]], preference: "recommended", units: "m",
           geometry: false, instructions: false,
         }));
         if (!parsed.success) throw new AppError("Der Routenservice hat eine ungültige Antwort geliefert.", 503);
