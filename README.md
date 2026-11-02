@@ -28,6 +28,16 @@ Die PNG- und ICO-Dateien werden mit `node scripts\generate-icons.mjs` aus
 
 ### Adminzugang
 
+Eigenes Passwort verdeckt eingeben und direkt im Live-Shop aktivieren:
+
+```powershell
+powershell.exe -NoProfile -File scripts\set-admin-password.ps1
+```
+
+Die Eingabe wird bestaetigt, nur der Hash als Production-Secret in Vercel
+hinterlegt und die aktuelle Production-Bereitstellung neu gestartet. Passwort
+und Hash werden nicht ausgegeben. Dafuer muss die Vercel CLI angemeldet sein.
+
 `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` und `SESSION_SECRET` konfigurieren.
 `ORDER_NOTIFICATION_EMAIL` erhaelt optional eine zusaetzliche interne Kopie
 jeder neuen Bestellung ueber dieselbe Versandwarteschlange mit Wiederholungen.

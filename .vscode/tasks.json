@@ -48,6 +48,20 @@
 			],
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Eigenes Admin-Passwort setzen und aktivieren",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"C:\\Users\\albin\\streusalz\\scripts\\set-admin-password.ps1"
+			],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }
